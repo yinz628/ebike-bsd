@@ -1,0 +1,60 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "hermes-agent",
+  "elements": [
+    {"type":"rectangle","id":"bg","x":-200,"y":-200,"width":1600,"height":1200,"backgroundColor":"#1e1e2e","fillStyle":"solid","strokeColor":"transparent","strokeWidth":0},
+    {"type":"text","id":"title","x":420,"y":-150,"text":"e-Bike BSD Turn Signal System V2.3","fontSize":24,"fontFamily":1,"strokeColor":"#e5e5e5","originalText":"e-Bike BSD Turn Signal System V2.3","autoResize":true},
+
+    {"type":"rectangle","id":"batt","x":30,"y":30,"width":160,"height":80,"backgroundColor":"#5c3d1a","fillStyle":"solid","strokeColor":"#f59e0b","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_batt","type":"text"}]},
+    {"type":"text","id":"t_batt","x":35,"y":52,"width":150,"height":25,"text":"48V 电瓶","fontSize":18,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"batt","originalText":"48V 电瓶","autoResize":true},
+
+    {"type":"arrow","id":"a1","x":190,"y":70,"width":80,"height":0,"points":[[0,0],[80,0]],"endArrowhead":"arrow","strokeColor":"#f59e0b","strokeWidth":2},
+
+    {"type":"rectangle","id":"dc1","x":270,"y":20,"width":180,"height":100,"backgroundColor":"#1e3a5f","fillStyle":"solid","strokeColor":"#4a9eed","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_dc1","type":"text"}]},
+    {"type":"text","id":"t_dc1","x":275,"y":35,"width":170,"height":50,"text":"XL7015\n48V→12V 3A","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"dc1","originalText":"XL7015\n48V→12V 3A","autoResize":true},
+
+    {"type":"arrow","id":"a2","x":360,"y":120,"width":0,"height":60,"points":[[0,0],[0,60]],"endArrowhead":"arrow","strokeColor":"#4a9eed","strokeWidth":2},
+
+    {"type":"rectangle","id":"dc2","x":270,"y":180,"width":180,"height":80,"backgroundColor":"#1e3a5f","fillStyle":"solid","strokeColor":"#4a9eed","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_dc2","type":"text"}]},
+    {"type":"text","id":"t_dc2","x":275,"y":200,"width":170,"height":25,"text":"LM2596 12V→5V","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"dc2","originalText":"LM2596 12V→5V","autoResize":true},
+
+    {"type":"arrow","id":"a3","x":270,"y":170,"width":0,"height":0,"points":[[0,0],[0,0]],"endArrowhead":"none","strokeColor":"#4a9eed","strokeWidth":2},
+
+    {"type":"text","id":"bus12v","x":460,"y":50,"text":"12V 总线──→ 4路LED转向灯","fontSize":16,"fontFamily":1,"strokeColor":"#f59e0b","originalText":"12V 总线──→ 4路LED转向灯","autoResize":true},
+    {"type":"text","id":"bus5v","x":460,"y":200,"text":"5V 总线──→ ESP32 + 雷达 + 蜂鸣器VCC","fontSize":16,"fontFamily":1,"strokeColor":"#4a9eed","originalText":"5V 总线──→ ESP32 + 雷达 + 蜂鸣器VCC","autoResize":true},
+
+    {"type":"rectangle","id":"esp32","x":30,"y":340,"width":250,"height":380,"backgroundColor":"#2d1b69","fillStyle":"solid","strokeColor":"#8b5cf6","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_esp32","type":"text"}]},
+    {"type":"text","id":"t_esp32","x":35,"y":350,"width":240,"height":20,"text":"ESP32 DevKit","fontSize":18,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"esp32","originalText":"ESP32 DevKit","autoResize":true},
+
+    {"type":"text","id":"esp_pins","x":40,"y":380,"text":"GPIO16←雷达TX(⑤)   GPIO17→雷达RX(④)\nGPIO4→左前灯       GPIO5→右前灯\nGPIO18→左后灯      GPIO19→右后灯\nGPIO25→左RCW LED   GPIO26→右RCW LED\nGPIO12→蜂鸣器       GPIO13←左转开关\nGPIO14←右转开关     GPIO15←双闪","fontSize":14,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"GPIO16←雷达TX(⑤)   GPIO17→雷达RX(④)\nGPIO4→左前灯       GPIO5→右前灯\nGPIO18→左后灯      GPIO19→右后灯\nGPIO25→左RCW LED   GPIO26→右RCW LED\nGPIO12→蜂鸣器       GPIO13←左转开关\nGPIO14←右转开关     GPIO15←双闪","autoResize":true},
+
+    {"type":"rectangle","id":"radar","x":500,"y":340,"width":220,"height":100,"backgroundColor":"#1a4d2e","fillStyle":"solid","strokeColor":"#22c55e","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_radar","type":"text"}]},
+    {"type":"text","id":"t_radar","x":505,"y":355,"width":210,"height":40,"text":"MS60-3015 Radar\n5V|GND|OUT|RX|TX","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"radar","originalText":"MS60-3015 Radar\n5V|GND|OUT|RX|TX","autoResize":true},
+
+    {"type":"arrow","id":"a_radar_rx","x":280,"y":410,"width":220,"height":0,"points":[[0,0],[220,0]],"endArrowhead":"arrow","strokeColor":"#22c55e","strokeWidth":1.5},
+    {"type":"arrow","id":"a_radar_tx","x":500,"y":430,"width":220,"height":0,"points":[[0,0],[-220,0]],"endArrowhead":"arrow","strokeColor":"#22c55e","strokeWidth":1.5},
+    {"type":"text","id":"t_radar_rx","x":350,"y":385,"text":"GPIO16←TX","fontSize":12,"fontFamily":1,"strokeColor":"#22c55e","originalText":"GPIO16←TX","autoResize":true},
+    {"type":"text","id":"t_radar_tx","x":350,"y":438,"text":"GPIO17→RX","fontSize":12,"fontFamily":1,"strokeColor":"#22c55e","originalText":"GPIO17→RX","autoResize":true},
+
+    {"type":"rectangle","id":"leds","x":780,"y":30,"width":230,"height":300,"backgroundColor":"#1e3a5f","fillStyle":"solid","strokeColor":"#f59e0b","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_leds","type":"text"}]},
+    {"type":"text","id":"t_leds","x":785,"y":40,"width":220,"height":20,"text":"4路 12V 转向灯 + MOSFET","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"leds","originalText":"4路 12V 转向灯 + MOSFET","autoResize":true},
+
+    {"type":"text","id":"t_led_detail","x":790,"y":70,"text":"GPIO4→100Ω→IRLZ44N G  前左\n  12V→LED+  LED-→D  S→GND\n\nGPIO5→100Ω→IRLZ44N G  前右\n  12V→LED+  LED-→D  S→GND\n\nGPIO18→100Ω→IRLZ44N G 后左\n  12V→LED+  LED-→D  S→GND\n\nGPIO19→100Ω→IRLZ44N G 后右\n  12V→LED+  LED-→D  S→GND","fontSize":12,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"GPIO4→100Ω→IRLZ44N G  前左\n  12V→LED+  LED-→D  S→GND\n\nGPIO5→100Ω→IRLZ44N G  前右\n  12V→LED+  LED-→D  S→GND\n\nGPIO18→100Ω→IRLZ44N G 后左\n  12V→LED+  LED-→D  S→GND\n\nGPIO19→100Ω→IRLZ44N G 后右\n  12V→LED+  LED-→D  S→GND","autoResize":true},
+
+    {"type":"rectangle","id":"indicators","x":780,"y":360,"width":230,"height":130,"backgroundColor":"#5c1a1a","fillStyle":"solid","strokeColor":"#ef4444","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_indicators","type":"text"}]},
+    {"type":"text","id":"t_indicators","x":785,"y":370,"width":220,"height":20,"text":"RCW 指示灯 + 蜂鸣器","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"indicators","originalText":"RCW 指示灯 + 蜂鸣器","autoResize":true},
+    {"type":"text","id":"t_ind_detail","x":790,"y":400,"text":"GPIO25→220Ω→LED左→GND\nGPIO26→220Ω→LED右→GND\nGPIO12→蜂鸣器I/O\n  5V→蜂鸣器VCC  GND→蜂鸣器GND","fontSize":12,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"GPIO25→220Ω→LED左→GND\nGPIO26→220Ω→LED右→GND\nGPIO12→蜂鸣器I/O\n  5V→蜂鸣器VCC  GND→蜂鸣器GND","autoResize":true},
+
+    {"type":"rectangle","id":"switches","x":780,"y":510,"width":230,"height":100,"backgroundColor":"#1a4d4d","fillStyle":"solid","strokeColor":"#22c55e","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_switches","type":"text"}]},
+    {"type":"text","id":"t_switches","x":785,"y":520,"width":220,"height":20,"text":"转向开关","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"switches","originalText":"转向开关","autoResize":true},
+    {"type":"text","id":"t_sw_detail","x":790,"y":550,"text":"GPIO13─┤├─GND = 左转\nGPIO14─┤├─GND = 右转\nGPIO15─┤├─GND = 双闪","fontSize":12,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"GPIO13─┤├─GND = 左转\nGPIO14─┤├─GND = 右转\nGPIO15─┤├─GND = 双闪","autoResize":true},
+
+    {"type":"rectangle","id":"horn","x":780,"y":630,"width":230,"height":90,"backgroundColor":"#5c3d1a","fillStyle":"solid","strokeColor":"#f59e0b","strokeWidth":2,"roundness":{"type":3},"boundElements":[{"id":"t_horn","type":"text"}]},
+    {"type":"text","id":"t_horn","x":785,"y":640,"width":220,"height":20,"text":"12V 喇叭 (可选)","fontSize":16,"fontFamily":1,"strokeColor":"#e5e5e5","textAlign":"center","verticalAlign":"middle","containerId":"horn","originalText":"12V 喇叭 (可选)","autoResize":true},
+    {"type":"text","id":"t_horn_detail","x":790,"y":670,"text":"12V→喇叭+  喇叭-→MOSFET D\nGPIO12→100Ω→MOSFET G  S→GND\n(共用蜂鸣器GPIO, IRLZ44N)","fontSize":12,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"12V→喇叭+  喇叭-→MOSFET D\nGPIO12→100Ω→MOSFET G  S→GND\n(共用蜂鸣器GPIO, IRLZ44N)","autoResize":true},
+
+    {"type":"text","id":"note","x":40,"y":750,"text":"注意事项:\n• 12V电源GND、5V电源GND、ESP32 GND 必须共地\n• MOSFET: IRLZ44N (逻辑电平, 3.3V可完全导通) 或 AO3400 (贴片)\n• 不加10kΩ栅极下拉 (已修复PWM模式bug)\n• 雷达5V取电, 文档确认支持5V","fontSize":14,"fontFamily":1,"strokeColor":"#a0a0a0","originalText":"注意事项:\n• 12V电源GND、5V电源GND、ESP32 GND 必须共地\n• MOSFET: IRLZ44N (逻辑电平, 3.3V可完全导通) 或 AO3400 (贴片)\n• 不加10kΩ栅极下拉 (已修复PWM模式bug)\n• 雷达5V取电, 文档确认支持5V","autoResize":true}
+  ],
+  "appState": {"viewBackgroundColor": "#1e1e2e"}
+}
