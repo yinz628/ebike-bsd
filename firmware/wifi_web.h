@@ -298,7 +298,15 @@ void initWebServer() {
                 static StaticJsonDocument<4096> doc;
                 doc.clear();
                 DeserializationError err = deserializeJson(doc, body);
-                if (!err) { config.fromJson(doc); config.saveToNVS(); radar.setBSDMode(); }
+                if (!err) {
+                    Serial.print("[WEB] POST body: "); Serial.println(body);
+                    config.fromJson(doc);
+                    bool saved = config.saveToNVS();
+                    if (!saved) Serial.println("[WEB] WARN: saveToNVS returned false!");
+                    radar.setBSDMode();
+                } else {
+                    Serial.print("[WEB] JSON parse err: "); Serial.println(err.c_str());
+                }
                 AsyncWebServerResponse *resp = req->beginResponse(err ? 400 : 200, "text/plain", err ? "invalid JSON" : "OK");
                 resp->addHeader("Access-Control-Allow-Origin", "*");
                 req->send(resp);

@@ -1,8 +1,8 @@
 # 电动自行车进阶转向灯系统 — 完整设计方案 (单雷达版)
 
 **版本:** V2.7 — WiFi控制台版
-**日期:** 2026-07-06 (更新: WiFi自动关状态机修复, 雷达目标残留修复, ArduionJson6.x适配) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认)
-**状态:** ✅ 官方4B帧 | BSD+RCW合并 | 速度两级报警 | 距离+速度可用 | WiFi自动关(30s) | 目标自动消失 | 正确AT6010命令
+**日期:** 2026-07-07 (更新: BSD参数清理, NVS审计, 配置保存错误检查, 串口DUMP/RESET命令) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认)
+**状态:** ✅ V2.7 | 21参数(NVS持久化) | 后方监测两级报警 | WiFi自动关(30s) | 目标自动消失 | 正确AT6010命令 | BSD已废弃
 **参考:** [AT6010_REFERENCE.md](AT6010_REFERENCE.md) — 协议帧格式、命令表、BSD帧结构
 **作者:** Hermes Agent (for 许国方)
 
@@ -1020,18 +1020,24 @@ board_build.partitions = default_ffat.csv
 | WiFi 自动关 | sta>0 时重置计时器(Bug: 幽灵站导致永不关) | **二态状态机**: 有连接清零计时 / 无连接累计 → 30s关; 断开后重新30s倒计时 |
 | WiFi 关闭序列 | WiFi.softAPdisconnect + WiFi.mode(WIFI_OFF) | **增加 WiFi.enableAP(false) + delay(50)** 确保 AP 信标彻底停止 |
 | 雷达目标残留 | 目标消失后红点永远留在可视化区 | **checkStale(500ms)**: 500ms无新BSD帧 → obj_num清零, 前端自动清除 |
-| Web API | 旧帧 obj_num 永久保留 | **帧过期机制**: frame.timestamp 超时 → 清零目标数+对象数组 |
+| 配置保存 | saveToNVS 不检查写结果, 静默失败 | **检查 putString 返回值 + 串口打印保存JSON**, POST handler 检查 saveToNVS 返回值 |
+| StaticJsonDocument | 函数栈上分配 4KB/8KB → 栈溢出 | **static 修饰符** → BSS段分配, 无栈风险 |
 | ArduinoJson API | add<JsonObject>() (已废弃) | **createNestedObject()** (6.x兼容) |
 | 构建系统 | 无库依赖声明 | **platformio.ini 明确依赖**(ArduinoJson 6.21, AsyncTCP, AsyncWebServer) |
+| BSD 参数组 | BSDParams 独立存在(7字段), V2.6已与RCW合并但未清理 | **彻底删除 BSDParams 结构体 + toJson/fromJson BSD分支**, ANGLE_IS_* 改读 config.rcw |
+| NVS 清理 | 残留 V2.5 旧格式(profile字段, 缺失6个RCW字段) | **出厂重置清空旧NVS + erase_region 彻底擦除** |
 
 ### 🔧 改进
 
 | 项目 | 说明 |
 |------|------|
+| 串口命令 | 新增 `RESET`(出厂重置), `DUMP`(打印完整JSON配置) |
 | WiFi串口调试 | 每2秒输出 `[WIFI] sta=N idle=Xs` 方便诊断 |
 | 可视化信息栏 | stale 后显示"无目标"而非"帧无效"(`valid` 保持 true) |
 | 编译警告 | `isInLeftTurnZone/isInRightTurnZone` 补上 return 语句, 无警告零错误 |
 | 空闲检测精度 | 检查间隔从 5s → 2s, 断开响应更快 |
+| 配置字段 | 从 28 字段(含废弃BSD)精简为 **21 字段** (RCW 10 + TURN 6 + SYS 3 + RADAR 2) |
+| factoryReset | 同时重置 sys 参数组(之前遗漏) |
 
 ### 📁 文件变更
 
@@ -1039,9 +1045,12 @@ board_build.partitions = default_ffat.csv
 |------|------|
 | `ebike_bsd.ino:#166-#207` | WiFi 自动关状态机重写 |
 | `ebike_bsd.ino:#213` | 新增 `radar.checkStale(500)` 调用 |
+| `ebike_bsd.ino:#252-#266` | 新增 RESET/DUMP 串口命令 |
 | `ms60_radar.h:#186` | 新增 `checkStale()` 方法 |
 | `wifi_web.h:#39` | `add<JsonObject>()` → `createNestedObject()` |
+| `wifi_web.h:#295-#310` | POST handler 加调试日志 + saveToNVS 返回值检查 |
 | `bsd_protocol.h:#138` | `isInLeftTurnZone/isInRightTurnZone` 补全实现 |
+| `config_store.h` | **删除 BSDParams 结构体**(14行), StaticJsonDocument 加 static, fromJson/toJson/summary/factoryReset 清理, saveToNVS 加错误检查 |
 | `platformio.ini` | 新增 lib_deps (ArduinoJson, AsyncTCP, AsyncWebServer) |
 
 ## V2.6 升级日志 (2026-07-05)

@@ -253,6 +253,17 @@ void loop() {
             config.saveToNVS();
             Serial.println("[FWD] Config saved to NVS");
         }
+        else if (line == "RESET") {
+            config.factoryReset();
+            Serial.println("[FWD] Factory reset done, NVS cleared");
+        }
+        else if (line == "DUMP") {
+            static StaticJsonDocument<4096> dump_doc;
+            dump_doc.clear();
+            config.toJson(dump_doc);
+            serializeJson(dump_doc, Serial);
+            Serial.println();
+        }
         else if (line == "LOAD") {
             config.loadFromNVS();
             config.summary();

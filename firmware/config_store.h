@@ -11,16 +11,6 @@
 
 // ============ 配置结构体 ============
 
-struct BSDParams {
-    int left_angle_min  = -40;
-    int left_angle_max  = -15;
-    int right_angle_min = 15;
-    int right_angle_max = 40;
-    int speed_threshold = 2;       // m/s
-    int range_limit     = 30;      // m
-    int flash_interval  = 500;     // ms (1Hz half-cycle)
-};
-
 struct RCWParams {
     int left_angle_min  = -40;     // °, 左检测区起始
     int left_angle_max  = -5;      // °, 左检测区结束
@@ -59,7 +49,6 @@ struct RadarParams {
 // ============ 全局配置类 ============
 class ConfigStore {
 public:
-    BSDParams       bsd;
     RCWParams       rcw;
     TurnAssistParams turn;
     SystemParams     sys;
@@ -67,15 +56,6 @@ public:
 
     // ---- JSON 序列化 ----
     void toJson(JsonDocument &doc) {
-        JsonObject b = doc["bsd"].to<JsonObject>();
-        b["left_min"]  = bsd.left_angle_min;
-        b["left_max"]  = bsd.left_angle_max;
-        b["right_min"] = bsd.right_angle_min;
-        b["right_max"] = bsd.right_angle_max;
-        b["speed"]     = bsd.speed_threshold;
-        b["range"]     = bsd.range_limit;
-        b["flash"]     = bsd.flash_interval;
-
         JsonObject r = doc["rcw"].to<JsonObject>();
         r["left_min"]  = rcw.left_angle_min;
         r["left_max"]  = rcw.left_angle_max;
@@ -107,16 +87,6 @@ public:
     }
 
     void fromJson(JsonDocument &doc) {
-        JsonObject b = doc["bsd"];
-        if (b) {
-            bsd.left_angle_min  = b["left_min"]  | bsd.left_angle_min;
-            bsd.left_angle_max  = b["left_max"]  | bsd.left_angle_max;
-            bsd.right_angle_min = b["right_min"] | bsd.right_angle_min;
-            bsd.right_angle_max = b["right_max"] | bsd.right_angle_max;
-            bsd.speed_threshold = b["speed"]     | bsd.speed_threshold;
-            bsd.range_limit     = b["range"]     | bsd.range_limit;
-            bsd.flash_interval  = b["flash"]  | bsd.flash_interval;
-        }
         JsonObject r = doc["rcw"];
         if (r) {
             rcw.left_angle_min  = r["left_min"]  | rcw.left_angle_min;
@@ -173,39 +143,45 @@ public:
 
     bool saveToNVS() {
         Preferences prefs;
-        if (!prefs.begin("ebike", false)) return false;
+        if (!prefs.begin("ebike", false)) {
+            Serial.println("[CONFIG] ERROR: NVS open failed!");
+            return false;
+        }
         static StaticJsonDocument<4096> doc;
         doc.clear();
         toJson(doc);
         String json;
         serializeJson(doc, json);
-        prefs.putString("config", json);
+        Serial.print("[CONFIG] saving JSON ("); Serial.print(json.length()); Serial.print("B): ");
+        Serial.println(json);
+        size_t written = prefs.putString("config", json);
         prefs.end();
-        Serial.println("[CONFIG] saved to NVS");
-        return true;
+        if (written == json.length()) {
+            Serial.println("[CONFIG] saved to NVS OK");
+            return true;
+        } else {
+            Serial.print("[CONFIG] ERROR: NVS write failed! wrote=");
+            Serial.print(written); Serial.print(" expected=");
+            Serial.println(json.length());
+            return false;
+        }
     }
 
     void summary() {
-        Serial.print("[CONFIG] BSD:L");
-        Serial.print(bsd.left_angle_min); Serial.print("~");
-        Serial.print(bsd.left_angle_max); Serial.print(" R");
-        Serial.print(bsd.right_angle_min); Serial.print("~");
-        Serial.print(bsd.right_angle_max); Serial.print(" s=");
-        Serial.print(bsd.speed_threshold); Serial.print(" r=");
-        Serial.print(bsd.range_limit); Serial.print(" | RCW:s=");
-        Serial.print(rcw.speed_threshold); Serial.print(" r=");
-        Serial.print(rcw.range_limit); Serial.print(" h=");
+        Serial.print("[CONFIG] RCW: low=");
+        Serial.print(rcw.low_speed); Serial.print("m/s speed=");
+        Serial.print(rcw.speed_threshold); Serial.print("m/s range=");
+        Serial.print(rcw.range_limit); Serial.print("m hold=");
         Serial.println(rcw.hold_time);
         Serial.print("[CONFIG] Radar: range=");
         Serial.print(radar.det_range); Serial.print("m sens=");
         Serial.println(radar.sensitivity);
-
     }
 
     void factoryReset() {
-        bsd   = BSDParams();
         rcw   = RCWParams();
         turn  = TurnAssistParams();
+        sys   = SystemParams();
         radar = RadarParams();
         saveToNVS();
     }
@@ -214,15 +190,18 @@ public:
 extern ConfigStore config;
 
 // ============ 角度判断内联函数 (运行时从config读取) ============
+// 后方监测角度 (BSD+RCW合并, 使用 config.rcw 参数)
 inline bool ANGLE_IS_LEFT(int a) {
-    return a >= config.bsd.left_angle_min && a <= config.bsd.left_angle_max;
+    return a >= config.rcw.left_angle_min && a <= config.rcw.left_angle_max;
 }
 inline bool ANGLE_IS_RIGHT(int a) {
-    return a >= config.bsd.right_angle_min && a <= config.bsd.right_angle_max;
+    return a >= config.rcw.right_angle_min && a <= config.rcw.right_angle_max;
 }
 inline bool ANGLE_IS_CENTER(int a) {
-    return a > config.bsd.left_angle_max && a < config.bsd.right_angle_min;
+    return a > config.rcw.left_angle_max && a < config.rcw.right_angle_min;
 }
+
+// 转向辅助角度
 inline bool TURN_ANGLE_IS_LEFT(int a) {
     return a >= config.turn.left_angle_min && a <= config.turn.left_angle_max;
 }
@@ -230,12 +209,8 @@ inline bool TURN_ANGLE_IS_RIGHT(int a) {
     return a >= config.turn.right_angle_min && a <= config.turn.right_angle_max;
 }
 
-// 后方监测角度 (REAR_ANGLE_IS_LEFT/RIGHT)
-inline bool REAR_ANGLE_IS_LEFT(int a) {
-    return a >= config.rcw.left_angle_min && a <= config.rcw.left_angle_max;
-}
-inline bool REAR_ANGLE_IS_RIGHT(int a) {
-    return a >= config.rcw.right_angle_min && a <= config.rcw.right_angle_max;
-}
+// 后方监测别名 (向后兼容)
+inline bool REAR_ANGLE_IS_LEFT(int a)  { return ANGLE_IS_LEFT(a); }
+inline bool REAR_ANGLE_IS_RIGHT(int a) { return ANGLE_IS_RIGHT(a); }
 
 #endif // CONFIG_STORE_H
