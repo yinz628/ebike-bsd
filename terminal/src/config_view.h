@@ -1,19 +1,20 @@
 // ============================================================
 //  config_view.h - 参数配置页 (Page 2) + FT6336 触摸调参
-//  显示可调参数 + [</>] 按钮, 触摸修改后发 $C 给主控
+//  显示可调参数 + [</>] 按钮, 触摸修改后 POST 到主控 /api/config
 // ============================================================
 #pragma once
 #include "lgfx_config.hpp"
-#include "uart_link.h"
+#include "net_link.h"
 
 extern LGFX lcd;
-extern UartLink link;
+extern NetLink netLink;
 
 class ConfigView {
 private:
-    // 参数定义: key (发给主控的 $C 键名), 显示名, 当前值, 步长, 最小, 最大, 单位
+    // 参数定义: group (主控 JSON 顶层), jsonkey (JSON 字段), 显示名, 当前值, 步长, 最小, 最大, 单位
     struct Param {
-        const char *key;
+        const char *group;
+        const char *jsonkey;
         const char *label;
         int value;
         int step;
@@ -23,11 +24,11 @@ private:
 
     static const int NPARAM = 5;
     Param params[NPARAM] = {
-        {"rcw_speed",  "RCW高警告速度", 3,    1, 1,  10, "m/s"},
-        {"rcw_range",  "RCW距离上限",   25,   5, 5,  50, "m"},
-        {"sensitivity","雷达灵敏度",     2,    1, 0,  10, "档"},
-        {"rcw_low",    "RCW低警告速度", 2,    1, 0,   5, "m/s"},
-        {"beep_cool",  "蜂鸣冷却",      5000, 500, 1000, 10000, "ms"},
+        {"rcw",   "speed",        "RCW高警告速度", 3,    1, 1,  10, "m/s"},
+        {"rcw",   "range",        "RCW距离上限",   25,   5, 5,  50, "m"},
+        {"radar", "sensitivity",  "雷达灵敏度",     2,    1, 0,  10, "档"},
+        {"rcw",   "low_speed",    "RCW低警告速度", 2,    1, 0,   5, "m/s"},
+        {"sys",   "bsd_beep_cooldown", "蜂鸣冷却", 5000, 500, 1000, 10000, "ms"},
     };
 
     int selected = 0;   // 当前选中项索引
@@ -122,26 +123,24 @@ public:
             }
         }
 
-        // 保存按钮
+        // 保存按钮 (逐个 POST, 主控 handler 自动 saveToNVS + setBSDMode)
         int by = lcd.height() - 24;
         if (ty >= by && ty <= by + 20 && tx >= 10 && tx <= 130) {
             if (dirty) {
-                // 逐个发送已改参数, 然后 SAVE
                 for (int i = 0; i < NPARAM; i++) {
-                    link.sendConfig(params[i].key, params[i].value);
+                    netLink.sendConfig(params[i].group, params[i].jsonkey, params[i].value);
                     delay(20);
                 }
-                link.sendSave();
                 dirty = false;
-                Serial.println("[CFG] 已发送配置 + SAVE");
+                Serial.println("[CFG] 已 POST 全部参数 (主控自动保存)");
             }
             return true;
         }
 
         // 出厂重置按钮
         if (ty >= by && ty <= by + 20 && tx >= lcd.width() - 130 && tx <= lcd.width() - 10) {
-            link.sendReset();
-            Serial.println("[CFG] 已发送 RESET");
+            netLink.sendFactoryReset();
+            Serial.println("[CFG] 已发送出厂重置");
             return true;
         }
 
@@ -156,7 +155,7 @@ private:
         if (nv != params[i].value) {
             params[i].value = nv;
             dirty = true;
-            Serial.printf("[CFG] %s = %d\n", params[i].key, nv);
+            Serial.printf("[CFG] %s.%s = %d\n", params[i].group, params[i].jsonkey, nv);
         }
     }
 

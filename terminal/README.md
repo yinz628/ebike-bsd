@@ -1,114 +1,105 @@
 # ebike-bsd 车把显示终端 (立创·实战派 ESP32-C3)
 
-把立创实战派 ESP32-C3 开发板作为 ebike-bsd 系统的可视化终端,通过 UART 有线连接车尾主控,显示雷达目标可视化、系统状态,并支持触摸配置参数。
+把立创实战派 ESP32-C3 开发板作为 ebike-bsd 系统的可视化终端,显示雷达目标可视化、系统状态,并支持触摸配置参数。
 
-## 架构
+## 通信方案:WiFi (当前实现)
+
+C3 作为 WiFi STA 连接车尾主控的 AP(`eBike-BSD`),通过 HTTP 轮询主控现有 Web API:
 
 ```
-车尾主控 ESP32-32D                    车把终端 实战派 ESP32-C3
-  UART1 (GPIO27=TX, GPIO32=RX)  ←→   GPIO18/19 多功能口 (复用为 UART)
-  5V / GND  ──────────────────────→   5V / GND (供电)
-  每 100ms 推送 $S 状态帧              接收 → ST7789 显示 + ES8311 报警音
-  接收 $C 命令 → 改 config             触摸 → 发送 $C 命令
+车尾主控 ESP32-32D (现有, 无需改动)
+  WiFi AP "eBike-BSD" 192.168.4.1
+    GET  /api/status   ← C3 每 200ms 轮询取目标/状态
+    GET  /api/config   ← C3 读取配置
+    POST /api/config   ← C3 触摸提交参数 (主控自动 saveToNVS + setBSDMode)
+    POST /api/reset    ← C3 出厂重置
+        │ WiFi (HTTP)
+        ▼
+车把终端 实战派 ESP32-C3
+  ST7789 屏: 雷达扇形图 + 状态 + 配置
+  FT6336 触摸: 切页/调参
+  ES8311 扬声器: 报警音同步 (按 buzzer 字段)
 ```
 
-一根 4 芯线(CH1.25 接口)同时承载供电和双向通信,延迟 <6ms。
+**延迟 ~200ms**,对目标可视化足够;主控车尾蜂鸣器是实时主警报源,C3 扬声器为补充提醒。
 
-## 接线
+> 历史上尝试过 UART 有线方案(代码保留在 `firmware/terminal_link.h`),但因主控 ESP32-32D 上 UART1 引脚重映射在完整项目代码下不生效(纯测试程序可以,带 WiFi/雷达的完整代码不行),最终采用 WiFi 方案。
 
-### 主控侧 (ESP32-32D) → 用排针引出的空闲 GPIO
+## 分阶段开关
 
-| 主控 GPIO | 方向 | 连接到 | C3 多功能口 |
-|:-:|---|---|:-:|
-| GPIO27 (TX) | → | C3 RX | IO18 |
-| GPIO32 (RX) | ← | C3 TX | IO19 |
-| 5V | → | C3 5V | 5V |
-| GND | ↔ | C3 GND | GND |
-
-> ⚠️ 主控 GPIO27 原为双闪按钮位(V2.6 已移除),GPIO32 在 38pin 板右侧排针。若你的板子上这两个脚没引出,可改 `terminal_link.h` 的 `TERM_TX_PIN/TERM_RX_PIN`。
-
-### C3 侧 (实战派)
-
-多功能口(1号 CH1.25)的 IO18/IO19 默认是 USB D-/D+,但**实战派板载独立的 USB-TTL 芯片**(走 Type-C 烧录),所以复用 GPIO18/19 不影响 USB 烧录。
-
-## 烧录
-
-### C3 终端
-```bash
-cd terminal
-pio run -t upload    # USB-C 数据线接 Type-C 口, 正常烧录
-```
-C3 的烧录完全走板载 USB-TTL,与 GPIO18/19 复用无关。
-
-### 主控 (改动后需重新烧录)
-```bash
-cd firmware
-pio run -t upload
-```
-
-## UART 协议 (ASCII 文本帧, 115200bps)
-
-### 主控 → C3: 状态帧 `$S`
-```
-$S,<obj_num>,<bz_mode>,<rcw_l>,<rcw_r>,<ind_l>,<ind_r>,<turn>,<rx_bytes>,<valid>,<t1_range>,<t1_angle>,<t1_velo>,<t1_id>,...\n
-```
-示例: `$S,1,2,1,0,2,0,1,12345,1,8,-28,4,1\n`
-
-| 字段 | 含义 |
-|---|---|
-| obj_num | 目标数 (0..4) |
-| bz_mode | 蜂鸣模式 0静音/1BSD短鸣/2RCW4Hz/3转向长鸣 |
-| rcw_l/r | 左/右后碰撞预警 (0/1) |
-| ind_l/r | 左/右指示灯模式 0灭/1BSD慢闪/2RCW快闪/3转向常亮 |
-| turn | 转向 0off/1left/2right |
-| rx_bytes | 主控雷达累计字节 (诊断) |
-| valid | 雷达帧有效 (0/1) |
-| t*_range/angle/velo/id | 各目标 距离m/角度°/速度m·s/ID |
-
-### C3 → 主控: 命令帧 `$C`
-```
-$C,<key>=<value>\n     例: $C,sensitivity=2\n
-$C,SAVE\n              保存配置到 NVS
-$C,RESET\n             出厂重置
-```
-
-可配置 key: `rcw_speed, rcw_low, rcw_range, rcw_hold, rcw_lmin/lmax/rmin/rmax, turn_speed, turn_range, sensitivity, det_range, beep_cool`
-
-## 界面 (3 页, 触摸顶部/底部切页)
-
-| 页 | 内容 |
-|---|---|
-| Page 0 雷达图 | 扇形可视化, 红点目标, 底部状态条 |
-| Page 1 状态 | 连接/运行时间/雷达字节/转向/蜂鸣/目标列表 |
-| Page 2 配置 | 5 个参数 [</>] 调节 + [保存][出厂重置] |
-
-## 分阶段验证
-
-本工程用条件编译开关(`c3_terminal.ino` 顶部)控制各功能模块,便于逐阶段验证:
+`c3_terminal.ino` 顶部用条件编译控制各模块,便于逐阶段验证:
 
 ```cpp
-#define ENABLE_RADAR_VIEW     // P2: 雷达扇形图 (默认开)
-// #define ENABLE_STATUS_VIEW    // P3: 状态页
-// #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
-// #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
+// #define ENABLE_DISPLAY      // 屏幕初始化 (LovyanGFX)
+// #define ENABLE_RADAR_VIEW   // P2: 雷达扇形图
+// #define ENABLE_STATUS_VIEW  // P3: 状态页
+// #define ENABLE_CONFIG_VIEW  // P3: 配置页 + 触摸
+// #define ENABLE_ALERT_SOUND  // P4: ES8311 报警音
 ```
 
-| 阶段 | 开关 | 验证 |
-|:-:|---|---|
-| P1 | 全关 | 串口看到 `[LINK] obj=N ...` 解析日志 |
-| P2 | RADAR_VIEW | 屏幕显示扇形图, 手挥动时红点跟随 |
-| P3 | +STATUS/+CONFIG | 触摸切页, <> 调参后主控串口确认收到 |
-| P4 | +ALERT_SOUND | 主控蜂鸣响时 C3 扬声器同步 |
+P1 阶段全关,只验证 WiFi 连接 + HTTP 取数据 + 串口打印心跳。
 
-## 待补全 (P4)
+## 硬件关键配置 (调试中确认)
 
-`alert_sound.h` 的 `initES8311Basic()` 留有 TODO:ES8311 的 I2C 寄存器初始化序列需参考实战派 C3 示例补全。I2S 引脚(WS/BCK/DOUT)需按实战派原理图核对(I2S_WS=7/I2S_BCK=10/I2S_DOUT=11 是常见值,实施时确认)。
+### C3 platformio.ini 必需的 build_flags
 
-## 主控固件改动
+```ini
+board_build.f_flash = 40000000L     ; ⚠ 必需! 实战派 Flash 不支持 80MHz, 否则 boot loop
+board_build.flash_mode = dio
+build_flags =
+    -D ARDUINO_USB_MODE=1
+    -D ARDUINO_USB_CDC_ON_BOOT=0     ; Serial 走 CH343 (UART0/GPIO21-20), 不走原生 USB
+    -D ARDUINO_USB_HID_ON_BOOT=0     ; 释放 GPIO18/19 的 USB-HID 占用 (留给 UART1, 若用有线方案)
+```
 
-仅 3 处,纯增量,不影响现有功能:
-1. `firmware/terminal_link.h` — 新增 UART 协议封装
-2. `firmware/ebike_bsd.ino` setup() — 加 `terminalLinkInit()`
-3. `firmware/ebike_bsd.ino` loop() — 加 `terminalLinkUpdate()`(在 updateBuzzer 之后)
+### 已确认的硬件事实
 
-现有 WiFi Web 控制台、雷达解析、BSD/RCW 逻辑全部不动。
+| 项目 | 值 |
+|---|---|
+| 芯片 | ESP32-C3 (QFN32 rev 0.4), 8MB Flash |
+| USB 转串口 | CH343 (接 GPIO21 TX0 / GPIO20 RX0, 即 UART0) |
+| 屏幕 | ST7789, 2.0寸 320×240, SPI (MOSI=5/SCK=3/CS=4/DC=6/BL=2) |
+| 触摸 | FT6336, I2C 0x38 (SDA=8/SCL=9) |
+| 音频 | ES8311 (I2S+I2C) |
+| 多功能口 | GPIO18/19 (默认 USB-HID, 需上述 flag 释放后可做 UART) |
+
+## 当前进度
+
+| 阶段 | 状态 |
+|:-:|:-:|
+| C3 boot loop 修复 (Flash 40MHz) | ✅ 已解决 |
+| C3 UART1 GPIO18/19 可用 (USB HID flag) | ✅ 已解决 (loopback 验证) |
+| 主控 terminal_link UART 协议 | ✅ 代码完成, 但主控 UART1 引脚重映射在完整代码下不生效 |
+| 转 WiFi 方案 | ✅ 代码完成 (`net_link.h`) |
+| C3 WiFi 连接主控 AP 验证 | ⏳ 待恢复 C3 后验证 |
+| 屏幕显示 / 触摸 / 报警音 | ⏳ 代码完成, 待联调 |
+
+## C3 恢复方法 (若 Serial 静默)
+
+调试过程中若 C3 串口完全无输出(bootloader 可能损坏),恢复步骤:
+
+1. 按住 C3 的 **BOOT** → 按一下 **RESET** → 松开 BOOT,进入下载模式
+2. 用 esptool 完整烧录三个文件:
+   ```bash
+   python -m esptool --port COM3 --chip esp32c3 write_flash \
+     0x0 bootloader.bin 0x8000 partitions.bin 0x10000 firmware.bin
+   ```
+3. 烧完应能看到 `=== ebike-bsd C3 终端 ===` 启动横幅
+
+## 文件结构
+
+```
+terminal/
+├── platformio.ini             C3 工程配置 (含 40MHz/HID 等 flags)
+├── src/
+│   ├── c3_terminal.ino        主框架 (WiFi + 心跳 + 触摸切页)
+│   ├── net_link.h             WiFi HTTP 客户端 (GET /api/status, POST /api/config)
+│   ├── lgfx_config.hpp        LovyanGFX ST7789 + FT6336 配置
+│   ├── radar_view.h           雷达扇形可视化 (移植自主控 web Canvas)
+│   ├── status_view.h          系统状态页
+│   ├── config_view.h          参数配置页 + 触摸调参
+│   └── alert_sound.h          ES8311 报警音同步
+└── README.md                  本文件
+```
+
+主控侧改动:`firmware/src/terminal_link.h`(UART 方案,保留备用)+ `ebike_bsd.ino` 的 init/update 调用。WiFi 方案下主控固件**无需任何改动**(直接复用现有 Web API)。

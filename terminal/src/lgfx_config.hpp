@@ -21,21 +21,12 @@
 #define TOUCH_SCL 9
 #define TOUCH_INT -1
 
-// FT6336 触摸类 (FT6206 系列驱动兼容 FT6336)
-class LGFX_FT6336 : public lgfx::Touch_FT5x06 {
-public:
-    LGFX_FT6336() : lgfx::Touch_FT5x06() {}
-    bool init(uint8_t sda, uint8_t scl, int8_t intr) {
-        return lgfx::Touch_FT5x06::init(sda, scl, intr, 0x38);
-    }
-};
-
 // 自定义屏幕配置类
 class LGFX : public lgfx::LGFX_Device {
     lgfx::Panel_ST7789  _panel;
     lgfx::Bus_SPI       _bus;
     lgfx::Light_PWM     _light;
-    LGFX_FT6336         _touch;
+    lgfx::Touch_FT5x06  _touch;   // FT6336 兼容 FT5x06 驱动
 
 public:
     LGFX() {
@@ -83,8 +74,17 @@ public:
             _light.config(cfg);
             _panel.setLight(&_light);
         }
-        {   // 触摸 FT6336
-            _touch.init(TOUCH_SDA, TOUCH_SCL, TOUCH_INT);
+        {   // 触摸 FT6336 (通过 _cfg 配置 I2C 引脚, 再 setTouch)
+            auto cfg = _touch.config();
+            cfg.i2c_addr = 0x38;
+            cfg.x_min = 0;
+            cfg.x_max = 319;
+            cfg.y_min = 0;
+            cfg.y_max = 239;
+            cfg.pin_sda = TOUCH_SDA;
+            cfg.pin_scl = TOUCH_SCL;
+            cfg.freq = 400000;
+            _touch.config(cfg);
             _panel.setTouch(&_touch);
         }
         setPanel(&_panel);

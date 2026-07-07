@@ -9,6 +9,7 @@
 #define TERMINAL_LINK_H
 
 #include <Arduino.h>
+#include <driver/uart.h>
 #include "bsd_protocol.h"
 #include "ms60_radar.h"
 #include "config_store.h"
@@ -22,12 +23,13 @@ extern bool rcw_l_active, rcw_r_active;
 extern int ind_left_mode, ind_right_mode;
 
 // ============ 引脚 ============
-// UART1: ESP32-32D 上 GPIO27(原双闪预留位) + GPIO32
-// 主控 TX(GPIO27) → C3 RX(GPIO18)
-// 主控 RX(GPIO32) ← C3 TX(GPIO19)
+// UART1: 用 GPIO21(TX)/GPIO22(RX), 原为 OLED I2C 脚 (本项目未用 OLED, 空闲)
+// 避免 GPIO27 (WROVER 模块上被 PSRAM 占用) 和 GPIO32 (部分板子受限)
+// 主控 TX(GPIO21) → C3 RX(GPIO18)
+// 主控 RX(GPIO22) ← C3 TX(GPIO19)
 #define TERM_UART_NUM     1
-#define TERM_TX_PIN       27
-#define TERM_RX_PIN       32
+#define TERM_TX_PIN       21
+#define TERM_RX_PIN       22
 #define TERM_BAUD         115200
 
 // 推送周期 (与主循环对齐)
@@ -95,8 +97,12 @@ public:
 
     void init() {
         _serial = &Serial1;
+        // ESP32 UART1: Arduino setPins 在某些 Core 版本不生效, 用 IDF uart_set_pin 强制绑定
+        _serial->end();
         _serial->begin(TERM_BAUD, SERIAL_8N1, TERM_RX_PIN, TERM_TX_PIN);
-        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=27/RX=32)");
+        uart_set_pin(UART_NUM_1, TERM_TX_PIN, TERM_RX_PIN,
+                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=21/RX=22)");
     }
 
     // 主循环调用: 推送状态 + 接收命令

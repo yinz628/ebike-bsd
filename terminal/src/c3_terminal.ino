@@ -1,23 +1,25 @@
 // ============================================================
 //  c3_terminal.ino - ebike-bsd 车把显示终端 (立创·实战派 ESP32-C3)
-//  功能: 通过 UART 接收主控状态 → ST7789 显示 + ES8311 报警音
+//  通信: WiFi STA → 主控 AP (eBike-BSD), HTTP GET /api/status
+//        延迟 ~200ms, 对显示足够 (报警音同步靠 buzzer 字段)
 //  分阶段实现:
-//    P1: UART 接收 + 串口打印           (先验证通信)
-//    P2: 屏幕显示雷达扇形图              (本文件含 radar_view)
-//    P3: 触摸切页 + 参数配置             (status_view/config_view)
-//    P4: ES8311 报警音同步               (alert_sound)
+//    P1: WiFi 连接 + HTTP 取数据 + 串口打印
+//    P2: 屏幕显示雷达扇形图
+//    P3: 触摸切页 + 参数配置
+//    P4: ES8311 报警音同步
 // ============================================================
 
 #include <Arduino.h>
 #include "lgfx_config.hpp"
-#include "uart_link.h"
+#include "net_link.h"
 
 // 全局对象
 LGFX lcd;
-UartLink link;
+NetLink netLink;
 
 // 分阶段开关 (开发时按需注释, 验证完逐个打开)
-#define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
+// P1 阶段: 全关, 只验证 WiFi 通信 + 基础启动 (屏幕暂不画)
+// #define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
 // #define ENABLE_STATUS_VIEW    // P3: 状态页
 // #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
 // #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
@@ -65,10 +67,11 @@ void setup() {
     Serial.println("\n=== ebike-bsd C3 终端 V0.1 ===");
     Serial.println("Hardware: 立创实战派 ESP32-C3");
 
-    // UART 链路 (接主控)
-    link.init();
+    // UART 链路 (接主控) — P1 阶段核心, 必须先于屏幕验证
+    netLink.init();
 
-    // 屏幕
+    // 屏幕 (用 ENABLE_DISPLAY 开关控制, P1 阶段先关掉, 避免屏幕驱动问题阻塞通信验证)
+#ifdef ENABLE_DISPLAY
     lcd.init();
     lcd.initDMA();
     lcd.setBrightness(180);     // 0-255, 适中亮度
@@ -81,6 +84,9 @@ void setup() {
     lcd.setCursor(60, 130);
     lcd.print("C3 Terminal booting...");
     lcd.display();
+#else
+    Serial.println("[INIT] 屏幕未启用 (P1: 仅 UART 验证). 定义 ENABLE_DISPLAY 开启屏幕");
+#endif
 
     updatePages();
     Serial.printf("[INIT] 页面数: %d\n", totalPages);
@@ -88,9 +94,10 @@ void setup() {
 
 // ============ LOOP ============
 void loop() {
-    // 1. 读 UART, 更新 link.state
-    link.update();
+    // 1. 读 UART, 更新 netLink.state
+    netLink.update();
 
+#ifdef ENABLE_DISPLAY
     // 2. 触摸处理 (切页 / 配置页调参)
     handleTouch();
 
@@ -98,25 +105,35 @@ void loop() {
     switch (currentPage) {
         case 0:
 #ifdef ENABLE_RADAR_VIEW
-            radarView.draw(link.state);
+            radarView.draw(netLink.state);
 #endif
             break;
         case 1:
 #ifdef ENABLE_STATUS_VIEW
-            statusView.draw(link.state);
+            statusView.draw(netLink.state);
 #endif
             break;
         case 2:
 #ifdef ENABLE_CONFIG_VIEW
-            configView.draw(link.state);
+            configView.draw(netLink.state);
 #endif
             break;
     }
+#endif
 
     // 4. 报警音同步
 #ifdef ENABLE_ALERT_SOUND
-    alertSound.update(link.state.bz_mode);
+    alertSound.update(netLink.state.bz_mode);
 #endif
+
+    // 心跳 (每 2 秒, 确认固件在跑 + 显示在线状态)
+    static unsigned long lastHb = 0;
+    if (millis() - lastHb > 2000) {
+        lastHb = millis();
+        Serial.printf("[HB] online=%d last_frame=%lums ago\n",
+                      netLink.state.online,
+                      netLink.state.online ? (millis() - netLink.state.last_frame_ms) : 0);
+    }
 
     delay(20);   // ~50fps 刷新
 }
