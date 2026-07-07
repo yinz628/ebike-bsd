@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 OUTDIR = os.path.join(os.path.dirname(__file__), "..", "kicad")
-SEXPR_DATE = "20240602"  # KiCad 8.0 format
+SEXPR_DATE = "20240108"  # KiCad 8.0 format
 
 # ── helpers ──────────────────────────────────────────────────
 def uid():
@@ -42,14 +42,14 @@ def generate_schematic():
     w(f"(uuid (str \"{uid()}\"))", 1)
 
     # Paper
-    w(f'(paper (str "A4"))', 1)
+    w(f'(paper "A4")', 1)
 
     # Title block
     w("(title_block", 1)
-    w(f'(title (str "e-Bike BSD System"))', 2)
+    w(f'(title "e-Bike BSD System")', 2)
     w(f'(date (str "{datetime.now().strftime("%Y-%m-%d")}"))', 2)
-    w(f'(rev (str "V2.3"))', 2)
-    w(f'(company (str "DIY"))', 2)
+    w(f'(rev "V2.3")', 2)
+    w(f'(company "DIY")', 2)
     w(")", 1)
 
     # ── Lib Symbols ──
@@ -83,7 +83,7 @@ def generate_schematic():
 
     # ── Sheet instances ──
     w("(sheet_instances", 1)
-    w(f'(path (str "/") (page (str "1")))', 2)
+    w(f'(path "/" (page "1"))', 2)
     w(")", 1)
 
     w(")")
@@ -229,21 +229,21 @@ def symbol_conn_01x02(inst_id, ref, name, x, y, lib_id="Connector_Generic:Conn_0
                         pins=None, footprint=None):
     """Generate a 2-pin connector symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "{lib_id}")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "{lib_id}") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "{footprint or "TerminalBlock:TerminalBlock_bornier-2_P5.08mm"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
+    lines.append(f'  (property "Footprint" (str "{footprint or "TerminalBlock:TerminalBlock_bornier-2_P5.08mm"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
     # Pin instances
     if pins:
         for i, (pin_num, pin_name, pin_type) in enumerate(pins):
-            lines.append(f'  (pin (str "{pin_num}") (str "{pin_type}"))')
+            lines.append(f'  (pin "{pin_num}" "{pin_type}")')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -253,20 +253,20 @@ def symbol_conn_01x03(inst_id, ref, name, x, y, lib_id="Connector_Generic:Conn_0
                         pins=None, footprint=None):
     """Generate a 3-pin connector symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "{lib_id}")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "{lib_id}") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
+    lines.append(f'  (property "Footprint" (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
     if pins:
         for pin_num, pin_name, pin_type in pins:
-            lines.append(f'  (pin (str "{pin_num}") (str "{pin_type}"))')
+            lines.append(f'  (pin "{pin_num}" "{pin_type}")')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -276,20 +276,20 @@ def symbol_conn_01x04(inst_id, ref, name, x, y, lib_id="Connector_Generic:Conn_0
                         pins=None, footprint=None):
     """Generate a 4-pin connector symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "{lib_id}")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "{lib_id}") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+100}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-100}) (rot 0)))')
+    lines.append(f'  (property "Footprint" (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-200}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
     if pins:
         for pin_num, pin_name, pin_type in pins:
-            lines.append(f'  (pin (str "{pin_num}") (str "{pin_type}"))')
+            lines.append(f'  (pin "{pin_num}" "{pin_type}")')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -299,20 +299,20 @@ def symbol_conn_01x05(inst_id, ref, name, x, y, lib_id="Connector_Generic:Conn_0
                         pins=None, footprint=None):
     """Generate a 5-pin connector symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "{lib_id}")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "{lib_id}") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+150}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-150}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-250}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-350}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+150}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-150}) (rot 0)))')
+    lines.append(f'  (property "Footprint" (str "{footprint or "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"}") (id 2) (at (x {x}) (y {y-250}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-350}) (rot 0)) (hide yes))')
     if pins:
         for pin_num, pin_name, pin_type in pins:
-            lines.append(f'  (pin (str "{pin_num}") (str "{pin_type}"))')
+            lines.append(f'  (pin "{pin_num}" "{pin_type}")')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -321,17 +321,17 @@ def symbol_conn_01x05(inst_id, ref, name, x, y, lib_id="Connector_Generic:Conn_0
 def symbol_conn_02x19(inst_id, ref, name, x, y):
     """Generate a 2×19 (38-pin) female header for ESP32."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "Connector_Generic:Conn_02x19_Odd_Even")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "Connector_Generic:Conn_02x19_Odd_Even") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x-300}) (y {y+2000}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-2100}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "Connector_PinSocket_2.54mm:PinSocket_2x19_P2.54mm_Vertical") (id 2) (at (x {x}) (y {y-2300}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-2500}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x-300}) (y {y+2000}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-2100}) (rot 0)))')
+    lines.append(f'  (property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_2x19_P2.54mm_Vertical" (id 2) (at (x {x}) (y {y-2300}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-2500}) (rot 0)) (hide yes))')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -340,17 +340,17 @@ def symbol_conn_02x19(inst_id, ref, name, x, y):
 def symbol_irlz44n(inst_id, ref, name, x, y):
     """Generate an IRLZ44N MOSFET symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "Transistor_FET:IRLZ44N")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "Transistor_FET:IRLZ44N") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x-150}) (y {y+200}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x+50}) (y {y-200}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "Package_TO_SOT_THT:TO-220-3_Vertical") (id 2) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-400}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x-150}) (y {y+200}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x+50}) (y {y-200}) (rot 0)))')
+    lines.append(f'  (property "Footprint" "Package_TO_SOT_THT:TO-220-3_Vertical" (id 2) (at (x {x}) (y {y-300}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-400}) (rot 0)) (hide yes))')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -359,17 +359,17 @@ def symbol_irlz44n(inst_id, ref, name, x, y):
 def symbol_device_2pin(inst_id, ref, name, x, y, lib_id, val1, val2):
     """Generic 2-pin device symbol (fuse, etc.)"""
     lines = []
-    lines.append(f'(symbol (lib_id (str "{lib_id}")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "{lib_id}") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+150}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{val1}") (id 1) (at (x {x}) (y {y}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "Fuse:Fuseholder_Cylinder-5x20mm_Wuerth_696103101002") (id 2) (at (x {x}) (y {y-150}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-250}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+150}) (rot 0)))')
+    lines.append(f'  (property "Value" "{val1}" (id 1) (at (x {x}) (y {y}) (rot 0)))')
+    lines.append(f'  (property "Footprint" "Fuse:Fuseholder_Cylinder-5x20mm_Wuerth_696103101002" (id 2) (at (x {x}) (y {y-150}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-250}) (rot 0)) (hide yes))')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -378,17 +378,17 @@ def symbol_device_2pin(inst_id, ref, name, x, y, lib_id, val1, val2):
 def symbol_resistor(inst_id, ref, value, x, y):
     """Generate a resistor symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "Device:R")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "Device:R") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+120}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{value}") (id 1) (at (x {x}) (y {y-120}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal") (id 2) (at (x {x}) (y {y-220}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-320}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+120}) (rot 0)))')
+    lines.append(f'  (property "Value" "{value}" (id 1) (at (x {x}) (y {y-120}) (rot 0)))')
+    lines.append(f'  (property "Footprint" "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal" (id 2) (at (x {x}) (y {y-220}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-320}) (rot 0)) (hide yes))')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -397,17 +397,17 @@ def symbol_resistor(inst_id, ref, value, x, y):
 def symbol_led(inst_id, ref, name, x, y):
     """Generate a LED symbol."""
     lines = []
-    lines.append(f'(symbol (lib_id (str "Device:LED")) (at (x {x}) (y {y}) (rot 0))')
+    lines.append(f'(symbol (lib_id "Device:LED") (at (x {x}) (y {y}) (rot 0))')
     lines.append(f'  (unit 1)')
     lines.append(f'  (in_bom yes) (on_board yes) (dnp no)')
-    lines.append(f'  (uuid (str "{inst_id}"))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0) (at (x {x}) (y {y+120}) (rot 0)))')
-    lines.append(f'  (property (str "Value") (str "{name}") (id 1) (at (x {x}) (y {y-120}) (rot 0)))')
-    lines.append(f'  (property (str "Footprint") (str "LED_THT:LED_D5.0mm") (id 2) (at (x {x}) (y {y-220}) (rot 0)) (hide yes))')
-    lines.append(f'  (property (str "Datasheet") (str "") (id 3) (at (x {x}) (y {y-320}) (rot 0)) (hide yes))')
+    lines.append(f'  (uuid "{inst_id}")')
+    lines.append(f'  (property "Reference" "{ref}" (id 0) (at (x {x}) (y {y+120}) (rot 0)))')
+    lines.append(f'  (property "Value" "{name}" (id 1) (at (x {x}) (y {y-120}) (rot 0)))')
+    lines.append(f'  (property "Footprint" "LED_THT:LED_D5.0mm" (id 2) (at (x {x}) (y {y-220}) (rot 0)) (hide yes))')
+    lines.append(f'  (property "Datasheet" "" (id 3) (at (x {x}) (y {y-320}) (rot 0)) (hide yes))')
     lines.append(f'  (instances')
-    lines.append(f'    (project (str "ebike-bsd")')
-    lines.append(f'      (path (str "/") (reference (str "{ref}")) (unit 1)))')
+    lines.append(f'    (project "ebike-bsd"')
+    lines.append(f'      (path "/" (reference "{ref}") (unit 1)))')
     lines.append(f'  )')
     lines.append(f')')
     return lines
@@ -422,7 +422,7 @@ def schematic_wires():
     wires = []
 
     def w(x1, y1, x2, y2):
-        wires.append(f'(wire (pts (xy {x1} {y1}) (xy {x2} {y2})) (stroke (width 0) (type default)) (uuid (str "{uid()}")))')
+        wires.append(f'(wire (pts (xy {x1} {y1}) (xy {x2} {y2})) (stroke (width 0) (type default)) (uuid "{uid()}"))')
 
     # ── Power net: 48V input ──
     # J1 pin1 → F1 pin1
@@ -529,7 +529,7 @@ def schematic_junctions():
         (6100, 4150),  # R4 gate
     ]
     for x, y in j_positions:
-        junctions.append(f'(junction (at (x {x}) (y {y})) (diameter 0) (uuid (str "{uid()}")))')
+        junctions.append(f'(junction (at (x {x}) (y {y})) (diameter 0) (uuid "{uid()}"))')
     return junctions
 
 
@@ -537,7 +537,7 @@ def schematic_noconnects():
     """No-connect flags for unused pins."""
     nc = []
     # J3 pin3 (OUT) is unused
-    nc.append(f'(no_connect (at (x {3500}) (y {6900})) (uuid (str "{uid()}")))')
+    nc.append(f'(no_connect (at (x {3500}) (y {6900})) (uuid "{uid()}"))')
     return nc
 
 # ═══════════════════════════════════════════════════════════════
@@ -557,8 +557,8 @@ def generate_pcb():
     # ── Setup ──
     w("(setup", 1)
     w("(stackup", 2)
-    w('(layer (str "F.Cu") (type signal))', 3)
-    w('(layer (str "B.Cu") (type signal))', 3)
+    w('(layer "F.Cu" (type signal))', 3)
+    w('(layer "B.Cu" (type signal))', 3)
     w(")", 2)
     w("(pad_to_mask_clearance 0.051)", 2)
     w(")", 1)
@@ -577,7 +577,7 @@ def generate_pcb():
         "SW_LEFT", "SW_RIGHT", "SW_HAZARD", "GND_LED", "GND_POWER",
     ]
     for i, name in enumerate(net_names, 1):
-        w(f'(net {i} (str "{name}"))', 1)
+        w(f'(net {i} "{name}")', 1)
 
     # ── Board outline (80mm × 60mm) ──
     # KiCad uses mm for coordinates in PCB
@@ -663,8 +663,8 @@ def generate_pcb():
         sb.append(indent(1, t))
 
     # ── Copper zones (GND pours) ──
-    w(f'(zone (net 6) (net_name (str "GND")) (layer (str "B.Cu")) (tstamp (str "{uid()}"))', 1)
-    w(f'  (name (str ""))', 2)
+    w(f'(zone (net 6) (net_name "GND") (layer "B.Cu") (tstamp "{uid()}")', 1)
+    w(f'  (name "")', 2)
     w(f'  (hatch (style edge) (pitch 0.5))', 2)
     w(f'  (priority 1)', 2)
     w(f'  (connect_pads (clearance 0.254))', 2)
@@ -679,8 +679,8 @@ def generate_pcb():
     w(f')', 1)
 
     # Top layer GND pour (perimeter only to avoid high-voltage shorts)
-    w(f'(zone (net 6) (net_name (str "GND")) (layer (str "F.Cu")) (tstamp (str "{uid()}"))', 1)
-    w(f'  (name (str ""))', 2)
+    w(f'(zone (net 6) (net_name "GND") (layer "F.Cu") (tstamp "{uid()}")', 1)
+    w(f'  (name "")', 2)
     w(f'  (hatch (style edge) (pitch 0.5))', 2)
     w(f'  (priority 1)', 2)
     w(f'  (connect_pads (clearance 0.254))', 2)
@@ -701,9 +701,9 @@ def generate_pcb():
 def fp_tht(ref, fp_name, x, y, rot):
     """Generate a generic THT footprint placement."""
     lines = []
-    lines.append(f'(footprint (lib_id (str "{fp_name}")) (at (x {x}) (y {y}) (rot {rot}))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0))')
-    lines.append(f'  (property (str "Value") (str "") (id 1))')
+    lines.append(f'(footprint (lib_id "{fp_name}") (at (x {x}) (y {y}) (rot {rot}))')
+    lines.append(f'  (property "Reference" "{ref}" (id 0))')
+    lines.append(f'  (property "Value" "" (id 1))')
     lines.append(f')')
     return lines
 
@@ -711,9 +711,9 @@ def fp_tht(ref, fp_name, x, y, rot):
 def fp_tht_conn(ref, fp_name, x, y, rot, full_lib_name):
     """Generate a connector footprint with full library path."""
     lines = []
-    lines.append(f'(footprint (lib_id (str "{full_lib_name}")) (at (x {x}) (y {y}) (rot {rot}))')
-    lines.append(f'  (property (str "Reference") (str "{ref}") (id 0))')
-    lines.append(f'  (property (str "Value") (str "") (id 1))')
+    lines.append(f'(footprint (lib_id "{full_lib_name}") (at (x {x}) (y {y}) (rot {rot}))')
+    lines.append(f'  (property "Reference" "{ref}" (id 0))')
+    lines.append(f'  (property "Value" "" (id 1))')
     lines.append(f')')
     return lines
 
@@ -722,7 +722,7 @@ def pcb_routing():
     """Generate track segments for the PCB."""
     segments = []
     def track(x1, y1, x2, y2, net, width=0.3, layer="F.Cu"):
-        segments.append(f'(segment (start (x {x1}) (y {y1})) (end (x {x2}) (y {y2})) (width {width}) (layer (str "{layer}")) (net {net}) (tstamp (str "{uid()}")))')
+        segments.append(f'(segment (start (x {x1}) (y {y1})) (end (x {x2}) (y {y2})) (width {width}) (layer "{layer}") (net {net}) (tstamp "{uid()}"))')
 
     # Net name → number mapping (1-based in KiCad)
     N = {
