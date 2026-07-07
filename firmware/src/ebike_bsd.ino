@@ -127,9 +127,14 @@ void setup() {
     Serial.println("=== e-Bike BSD Turn Signal System (V2.7) ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
 
-    // 加载配置 (首次开机用默认值并保存)
+    // 加载配置
+    // ⚠ loadFromNVS 失败时不写 NVS: 失败原因可能是 NVS 分区被破坏(otadata 越界擦除等),
+    // 此时若 saveToNVS(默认值) 会覆盖用户配置 → 每次重启配置丢失.
+    // 首次烧录无配置时, 结构体的默认值会自然生效, 等用户主动改配置时才写 NVS.
     Serial.println("[CONFIG] 加载...");
-    if (!config.loadFromNVS()) { Serial.println("[CONFIG] 写入默认配置"); config.saveToNVS(); }
+    if (!config.loadFromNVS()) {
+        Serial.println("[CONFIG] NVS 无配置或读取失败, 使用默认值 (不写 NVS)");
+    }
     config.summary();
 
     // WiFi AP + Web控制台 (每次开机都启动, 120秒无人连自动关)
@@ -270,7 +275,9 @@ void loop() {
             Serial.println();
         }
         else if (line == "LOAD") {
-            if (!config.loadFromNVS()) { Serial.println("[CONFIG] 写入默认配置"); config.saveToNVS(); }
+            if (!config.loadFromNVS()) {
+                Serial.println("[CONFIG] NVS 无配置或读取失败, 使用默认值 (不写 NVS)");
+            }
             config.summary();
         }
         else if (line.startsWith("CMD:")) {

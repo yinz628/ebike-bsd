@@ -179,10 +179,22 @@ public:
     }
 
     void factoryReset() {
+        // 重置内存结构体为默认值
         rcw   = RCWParams();
         turn  = TurnAssistParams();
         sys   = SystemParams();
         radar = RadarParams();
+        // 清空 NVS 中的旧配置
+        // ⚠ 不可用 esp_partition_erase_region(0x9000, 0x6000) 之类裸擦除:
+        //    会越界破坏 otadata 分区 → 下次 NVS 初始化失败 → loadFromNVS 返回 false
+        //    → 若 setup 里"失败即写默认值"则用户配置被永久覆盖.
+        //    只用 Preferences::clear() 精确清理本命名空间.
+        Preferences prefs;
+        if (prefs.begin("ebike", false)) {
+            prefs.clear();   // 仅清 ebike 命名空间, 不影响其他分区
+            prefs.end();
+        }
+        // 写入默认配置
         saveToNVS();
     }
 };
