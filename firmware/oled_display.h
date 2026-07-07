@@ -43,7 +43,7 @@ public:
             _display.setTextSize(1);
             _display.setTextColor(SSD1306_WHITE);
             _display.setCursor(0, 0);
-            _display.println("BSD V2.1");
+            _display.println("BSD V2.7");
             _display.println("Single Radar");
             _display.println("Booting...");
             _display.display();

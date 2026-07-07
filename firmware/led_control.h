@@ -16,6 +16,7 @@ class LEDController {
 private:
     uint8_t _pins[4];
     bool    _initialized[4];
+    bool    _pwm_attached[4];   // 该通道是否已 attach PWM
     int     _count;
 
 public:
@@ -23,6 +24,7 @@ public:
         for (int i = 0; i < 4; i++) {
             _pins[i] = 0;
             _initialized[i] = false;
+            _pwm_attached[i] = false;
         }
     }
 
@@ -48,11 +50,26 @@ public:
         digitalWrite(gpio, on ? HIGH : LOW);
     }
 
-    // PWM调光 (0-255)
+    // PWM调光 (0-255). 首次调用时按需 attach, 兼容 ESP32 Core 2.x/3.x
     void setBrightness(uint8_t gpio, uint8_t duty) {
         for (int i = 0; i < _count; i++) {
             if (_pins[i] == gpio) {
+                if (!_pwm_attached[i]) {
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+                    // Core 3.x: ledcAttach(pin, freq, res)
+                    ledcAttach(gpio, PWM_FREQ, PWM_RES);
+#else
+                    // Core 2.x: channel-based API
+                    ledcSetup(i, PWM_FREQ, PWM_RES);
+                    ledcAttachPin(gpio, i);
+#endif
+                    _pwm_attached[i] = true;
+                }
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
                 ledcWrite(gpio, duty);
+#else
+                ledcWrite(i, duty);
+#endif
                 return;
             }
         }

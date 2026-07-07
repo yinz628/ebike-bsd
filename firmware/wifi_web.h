@@ -60,7 +60,9 @@ void handleConfigGet(AsyncWebServerRequest *req) {
 }
 
 void handleFactoryReset(AsyncWebServerRequest *req) {
-    config.factoryReset(); req->send(200, "text/plain", "OK");
+    config.factoryReset();
+    radar.setBSDMode();   // 出厂配置立即下发雷达, 无需重启即生效
+    req->send(200, "text/plain", "OK");
 }
 
 const char INDEX_HTML[] PROGMEM = R"rawliteral(

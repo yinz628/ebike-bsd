@@ -255,7 +255,8 @@ void loop() {
         }
         else if (line == "RESET") {
             config.factoryReset();
-            Serial.println("[FWD] Factory reset done, NVS cleared");
+            radar.setBSDMode();  // 将出厂配置立即下发给雷达 (灵敏度/距离)
+            Serial.println("[FWD] Factory reset done, NVS cleared, radar reconfigured");
         }
         else if (line == "DUMP") {
             static StaticJsonDocument<4096> dump_doc;
@@ -263,30 +264,6 @@ void loop() {
             config.toJson(dump_doc);
             serializeJson(dump_doc, Serial);
             Serial.println();
-        }
-        else if (line == "LOAD") {
-            config.loadFromNVS();
-            config.summary();
-        }
-        else if (line == "TESTPOST") {
-            // 自测: ESP32给自己发POST, 验证Web服务器
-            Serial.println("[TEST] Sending POST to self...");
-            WiFiClient client;
-            if (client.connect("192.168.4.1", 80)) {
-                String body = "{\"bsd\":{\"speed\":99},\"sys\":{\"profile\":\"test\"}}";
-                client.print("POST /api/config HTTP/1.1\r\n");
-                client.print("Host: 192.168.4.1\r\n");
-                client.print("Content-Type: application/json\r\n");
-                client.print("Content-Length: " + String(body.length()) + "\r\n");
-                client.print("\r\n");
-                client.print(body);
-                delay(500);
-                while(client.available()) { client.read(); }
-                client.stop();
-                Serial.println("[TEST] POST sent, check serial for [WEB] response");
-            } else {
-                Serial.println("[TEST] FAIL: cannot connect to self");
-            }
         }
         else if (line == "LOAD") {
             if (!config.loadFromNVS()) { Serial.println("[CONFIG] 写入默认配置"); config.saveToNVS(); }
@@ -305,7 +282,7 @@ void loop() {
                 }
             }
             if (len > 0) {
-                Serial2.write(buf, len);
+                radar.sendCmd(buf, len);  // 通过雷达对象发送 (封装的 UART)
                 Serial.print("[FWD] sent "); Serial.print(len); Serial.println(" bytes");
             }
         }
@@ -322,7 +299,7 @@ void loop() {
         updateTurnAssist();
     }
 
-    // 6) LED 闪烁控制 (转向灯/双闪 PWM)
+    // 6) LED 闪烁控制 (转向灯 PWM)
     blinkLEDs();
 
     // 6.5) 指示灯状态机 (BSD/RCW/转向辅集中刷新)
