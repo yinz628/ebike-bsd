@@ -125,10 +125,18 @@ public:
     // ---- NVS 持久化 ----
     bool loadFromNVS() {
         Preferences prefs;
-        if (!prefs.begin("ebike", true)) return false;
+        if (!prefs.begin("ebike", true)) {
+            Serial.println("[CONFIG] NVS open read-only FAILED");
+            return false;
+        }
         String json = prefs.getString("config", "");
         prefs.end();
-        if (json.isEmpty()) return false;
+        if (json.isEmpty()) {
+            Serial.println("[CONFIG] NVS key 'config' is empty");
+            return false;
+        }
+        Serial.print("[CONFIG] NVS raw("); Serial.print(json.length()); Serial.print("B): ");
+        Serial.println(json);
         static StaticJsonDocument<4096> doc;
         DeserializationError err = deserializeJson(doc, json);
         if (err) {

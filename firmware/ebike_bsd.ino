@@ -126,9 +126,11 @@ void setup() {
     Serial.println("=== e-Bike BSD Turn Signal System (V2.7) ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
 
-    // 加载配置 (首次开机用默认值并保存)
+    // 加载配置 (首次开机用默认值但不写入NVS, 用户主动保存时才写)
     Serial.println("[CONFIG] 加载...");
-    if (!config.loadFromNVS()) { Serial.println("[CONFIG] 写入默认配置"); config.saveToNVS(); }
+    if (!config.loadFromNVS()) {
+        Serial.println("[CONFIG] 使用默认配置 (未写入NVS)");
+    }
     config.summary();
 
     // WiFi AP + Web控制台 (每次开机都启动, 120秒无人连自动关)
