@@ -73,6 +73,7 @@ typedef enum {
 
 TurnState_t turn_state = TURN_OFF;
 #include "wifi_web.h"
+#include "terminal_link.h"   // 车把 C3 终端 UART1 链路 (新增, 独立于 WiFi)
 
 unsigned long last_blink_time = 0;
 unsigned long last_bsd_beep_time = 0;
@@ -158,6 +159,9 @@ void setup() {
     
     Serial.println("=== 系统就绪 ===");
     Serial.println("[WEB] 手机连接 eBike-BSD 热点, 浏览器打开 192.168.4.1");
+
+    // C3 车把终端 UART 链路 (可选, 无 C3 时静默)
+    terminalLinkInit();
 }
 
 // ===============================================================
@@ -307,6 +311,9 @@ void loop() {
 
     // 7) 蜂鸣器状态机
     updateBuzzer();
+
+    // 7.5) 车把 C3 终端链路 (推送状态 + 接收触摸命令)
+    terminalLinkUpdate();
 
     // 8) 调试输出 (每2秒, WiFi模式下降低频率避免串口争用)
     static unsigned long last_debug = 0;
