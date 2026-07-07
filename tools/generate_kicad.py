@@ -152,18 +152,18 @@ def schematic_symbols():
         uid(), "H1", "ESP32-DevKitC", x_base["esp32"], 4500,
     ))
 
-    # ── Q1-Q4: IRLZ44N MOSFETs ──
-    mosfet_y_positions = [7000, 6000, 5000, 4000]
-    mosfet_labels = ["Q1", "Q2", "Q3", "Q4"]
-    mosfet_names = ["LED_FL", "LED_FR", "LED_RL", "LED_RR"]
-    gpios = ["GPIO4", "GPIO5", "GPIO18", "GPIO19"]
+    # ── Q1-Q2: IRLZ44N MOSFETs (V2.6: 同侧前后并联, 共 2 路) ──
+    mosfet_y_positions = [7000, 6000]
+    mosfet_labels = ["Q1", "Q2"]
+    mosfet_names = ["LED_LEFT", "LED_RIGHT"]
+    gpios = ["GPIO4", "GPIO23"]
 
     for i, (lab, name, y, gpio) in enumerate(zip(mosfet_labels, mosfet_names, mosfet_y_positions, gpios)):
         result.extend(symbol_irlz44n(
             uid(), lab, name, x_base["mosfets"], y,
         ))
 
-    # ── R1-R4: 100Ω gate resistors ──
+    # ── R1-R2: 100Ω gate resistors ──
     for i, (lab, y) in enumerate(zip(mosfet_labels, mosfet_y_positions)):
         result.extend(symbol_resistor(
             uid(), lab, "100Ω", x_base["mosfets"] - 400, y + 150,
@@ -211,10 +211,9 @@ def schematic_symbols():
               ("3", "HAZARD", "output"), ("4", "GND", "input")],
     ))
 
-    # ── J6: Turn Signal Outputs (4×2-pin blocks or one 8-pin) ──
-    # Using 4 separate 2-pin connectors for clarity
-    j6_labels = ["TURN_FL", "TURN_FR", "TURN_RL", "TURN_RR"]
-    for i, (lab, y) in enumerate(zip(j6_labels, [7000, 6000, 5000, 4000])):
+    # ── J6: Turn Signal Outputs (2×2-pin, V2.6 同侧前后并联) ──
+    j6_labels = ["TURN_LEFT", "TURN_RIGHT"]
+    for i, (lab, y) in enumerate(zip(j6_labels, [7000, 6000])):
         result.extend(symbol_conn_01x02(
             uid(), f"J6{i+1}", lab, x_base["mosfets"] + 500, y, "Connector_Generic:Conn_01x02",
             pins=[("1", "LED-", "input"), ("2", "GND", "input")],
@@ -455,21 +454,13 @@ def schematic_wires():
     # In practice, the netlist drives the PCB; the schematic wires are visual
 
     # Key signal connections (simplified)
-    # ESP32 GPIO4 → R1 → Q1.G
+    # ESP32 GPIO4 → R1 → Q1.G  (左侧前+后并联)
     w(4200, 6500, 6100, 7150)
     w(6100, 7150, 6100, 7000)
 
-    # ESP32 GPIO5 → R2 → Q2.G
+    # ESP32 GPIO23 → R2 → Q2.G  (右侧前+后并联)
     w(4200, 6300, 6100, 6150)
     w(6100, 6150, 6100, 6000)
-
-    # ESP32 GPIO18 → R3 → Q3.G
-    w(4200, 6100, 6100, 5150)
-    w(6100, 5150, 6100, 5000)
-
-    # ESP32 GPIO19 → R4 → Q4.G
-    w(4200, 5900, 6100, 4150)
-    w(6100, 4150, 6100, 4000)
 
     # Radar: ESP32 GPIO16 ← J3.TX (pin5)
     w(4200, 5100, 3500, 5100)
@@ -483,23 +474,15 @@ def schematic_wires():
     w(4200, 4700, 4000, 4700)
     w(4000, 4700, 4000, 6800)
 
-    # Switches: ESP32 GPIO13/14/15 → J5
+    # Switches: ESP32 GPIO13/14 → J5  (V2.6: 双闪已移除)
     w(4200, 4500, 5000, 4500)
     w(4200, 4300, 5000, 4300)
-    w(4200, 4100, 5000, 4100)
 
-    # Q1.D → J6_1 (left front)
+    # Q1.D → J6_1 (left, 前+后并联)
     w(6500, 7000, 7000, 7000)
-    w(7000, 7000, 7000, 7000)
 
-    # Q2.D → J6_2 (right front)
+    # Q2.D → J6_2 (right, 前+后并联)
     w(6500, 6000, 7000, 6000)
-
-    # Q3.D → J6_3 (left rear)
-    w(6500, 5000, 7000, 5000)
-
-    # Q4.D → J6_4 (right rear)
-    w(6500, 4000, 7000, 4000)
 
     # Indicator LEDs
     w(7600, 6500, 8000, 6500)  # R5 → D1
@@ -508,8 +491,6 @@ def schematic_wires():
     # GND bus connections (all to bottom rail at y=8000)
     w(6500, 7000, 6500, 8000)  # Q1.S
     w(6500, 6000, 6500, 8000)  # Q2.S
-    w(6500, 5000, 6500, 8000)  # Q3.S
-    w(6500, 4000, 6500, 8000)  # Q4.S
     w(8000, 7000, 8000, 8000)  # D1 cathode
     w(8000, 5500, 8000, 8000)  # D2 cathode
 
@@ -525,8 +506,6 @@ def schematic_junctions():
         (2600, 6000),  # GND bus junction
         (6100, 7150),  # R1 gate
         (6100, 6150),  # R2 gate
-        (6100, 5150),  # R3 gate
-        (6100, 4150),  # R4 gate
     ]
     for x, y in j_positions:
         junctions.append(f'(junction (at (x {x}) (y {y})) (diameter 0) (uuid (str "{uid()}")))')
@@ -568,13 +547,11 @@ def generate_pcb():
     net_names = [
         "+48V", "+48V_F", "+12V", "+5V", "+3.3V", "GND",
         "RADAR_TX", "RADAR_RX",
-        "LED_FL_GATE", "LED_FL_MOS",
-        "LED_FR_GATE", "LED_FR_MOS",
-        "LED_RL_GATE", "LED_RL_MOS",
-        "LED_RR_GATE", "LED_RR_MOS",
-        "LED_FL_OUT", "LED_FR_OUT", "LED_RL_OUT", "LED_RR_OUT",
+        "LED_L_GATE", "LED_L_MOS",
+        "LED_R_GATE", "LED_R_MOS",
+        "LED_L_OUT", "LED_R_OUT",
         "BUZZER", "RCW_L", "RCW_R", "RCW_L_LED", "RCW_R_LED",
-        "SW_LEFT", "SW_RIGHT", "SW_HAZARD", "GND_LED", "GND_POWER",
+        "SW_LEFT", "SW_RIGHT",
     ]
     for i, name in enumerate(net_names, 1):
         w(f'(net {i} (str "{name}"))', 1)
@@ -596,7 +573,7 @@ def generate_pcb():
     #   y=20 to 5: U2 (LM2596), 12V bus
     #   y=5 to -5: ESP32 header (center)
     #   y=-5 to -20: Connectors (J3/J4/J5)
-    #   y=-20 to -30: MOSFETs Q1-Q4 + J6 outputs
+    #   y=-20 to -30: MOSFETs Q1-Q2 + J6 outputs
 
     footprints = []
 
@@ -618,15 +595,15 @@ def generate_pcb():
     # H1: ESP32 38-pin female header (2×19)
     footprints.append(fp_tht_conn("H1", "PinSocket_2x19_P2.54mm_Vertical", 0, 0, 0, "Connector_PinSocket_2.54mm:PinSocket_2x19_P2.54mm_Vertical"))
 
-    # Q1-Q4: IRLZ44N (TO-220 horizontal mount, bent leads)
-    mosfet_positions = [(-20, -22), (0, -22), (20, -22), (-20, -28)]
-    for i, (lab, pos) in enumerate(zip(["Q1", "Q2", "Q3", "Q4"], mosfet_positions)):
+    # Q1-Q2: IRLZ44N (V2.6: 仅 2 路, 同侧前后并联)
+    mosfet_positions = [(-20, -22), (0, -22)]
+    for i, (lab, pos) in enumerate(zip(["Q1", "Q2"], mosfet_positions)):
         footprints.append(fp_tht(lab, f"TO-220-3_Vertical", pos[0], pos[1], 0))
 
-    # R1-R4: gate resistors (axial, horizontal)
-    for i, (lab, x, y) in enumerate(zip(["R1","R2","R3","R4"],
-                                         [-15, 5, 25, -15],
-                                         [-20, -20, -20, -27])):
+    # R1-R2: gate resistors (axial, horizontal)
+    for i, (lab, x, y) in enumerate(zip(["R1","R2"],
+                                         [-15, 5],
+                                         [-20, -20])):
         footprints.append(fp_tht(lab, "R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal", x, y, 90))
 
     # R5-R6: LED resistors
@@ -643,12 +620,12 @@ def generate_pcb():
     # J4: Buzzer (3-pin header)
     footprints.append(fp_tht_conn("J4", "PinHeader_1x03_P2.54mm_Vertical", -25, -15, 0, "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"))
 
-    # J5: Switch (4-pin header)
-    footprints.append(fp_tht_conn("J5", "PinHeader_1x04_P2.54mm_Vertical", 25, -10, 0, "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"))
+    # J5: Switch (3-pin header: L/R/GND, V2.6 双闪已移除)
+    footprints.append(fp_tht_conn("J5", "PinHeader_1x03_P2.54mm_Vertical", 25, -10, 0, "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"))
 
-    # J6_1-J6_4: Turn signal outputs (4× 2-pin terminals)
-    j6_positions = [(-25, -22), (-10, -22), (5, -22), (20, -22)]
-    for i, (lab, pos) in enumerate(zip(["J6_1","J6_2","J6_3","J6_4"], j6_positions)):
+    # J6_1-J6_2: Turn signal outputs (2× 2-pin terminals, 同侧前后并联)
+    j6_positions = [(-25, -22), (-10, -22)]
+    for i, (lab, pos) in enumerate(zip(["J6_1","J6_2"], j6_positions)):
         footprints.append(fp_tht_conn(lab, "TerminalBlock_bornier-2_P5.08mm", pos[0], pos[1], 0, "Connector_Phoenix:TerminalBlock_Phoenix_MKDS_1x2_P5.08mm_Horizontal"))
 
     for fp in footprints:
@@ -728,13 +705,11 @@ def pcb_routing():
     N = {
         "+48V": 1, "+48V_F": 2, "+12V": 3, "+5V": 4, "+3.3V": 5, "GND": 6,
         "RADAR_TX": 7, "RADAR_RX": 8,
-        "LED_FL_GATE": 9, "LED_FL_MOS": 10,
-        "LED_FR_GATE": 11, "LED_FR_MOS": 12,
-        "LED_RL_GATE": 13, "LED_RL_MOS": 14,
-        "LED_RR_GATE": 15, "LED_RR_MOS": 16,
-        "LED_FL_OUT": 17, "LED_FR_OUT": 18, "LED_RL_OUT": 19, "LED_RR_OUT": 20,
-        "BUZZER": 21, "RCW_L": 22, "RCW_R": 23, "RCW_L_LED": 24, "RCW_R_LED": 25,
-        "SW_LEFT": 26, "SW_RIGHT": 27, "SW_HAZARD": 28,
+        "LED_L_GATE": 9, "LED_L_MOS": 10,
+        "LED_R_GATE": 11, "LED_R_MOS": 12,
+        "LED_L_OUT": 13, "LED_R_OUT": 14,
+        "BUZZER": 15, "RCW_L": 16, "RCW_R": 17, "RCW_L_LED": 18, "RCW_R_LED": 19,
+        "SW_LEFT": 20, "SW_RIGHT": 21,
     }
 
     # ── Power routing (top layer F.Cu) ──
@@ -752,21 +727,15 @@ def pcb_routing():
     track(0, -2, -25, -10, N["RADAR_TX"], 0.3)    # ESP32←J3
     track(0, 2, -25, -9, N["RADAR_RX"], 0.3)      # ESP32→J3
 
-    # MOSFET gates: GPIO→R→Q.G
-    track(0, -4, -15, -20, N["LED_FL_GATE"], 0.3)  # GPIO4→R1
-    track(-15, -20, -20, -22, N["LED_FL_MOS"], 0.3) # R1→Q1.G
-    track(2, -4, 5, -20, N["LED_FR_GATE"], 0.3)
-    track(5, -20, 0, -22, N["LED_FR_MOS"], 0.3)
-    track(4, -2, 25, -20, N["LED_RL_GATE"], 0.3)
-    track(25, -20, 20, -22, N["LED_RL_MOS"], 0.3)
-    track(6, 2, -15, -27, N["LED_RR_GATE"], 0.3)
-    track(-15, -27, -20, -28, N["LED_RR_MOS"], 0.3)
+    # MOSFET gates: GPIO→R→Q.G  (V2.6: 仅 Q1/Q2 两路, 同侧前后并联)
+    track(0, -4, -15, -20, N["LED_L_GATE"], 0.3)   # GPIO4→R1
+    track(-15, -20, -20, -22, N["LED_L_MOS"], 0.3) # R1→Q1.G
+    track(2, -4, 5, -20, N["LED_R_GATE"], 0.3)     # GPIO23→R2
+    track(5, -20, 0, -22, N["LED_R_MOS"], 0.3)     # R2→Q2.G
 
-    # MOSFET D → J6 (turn signal outputs)
-    track(-20, -22, -25, -22, N["LED_FL_OUT"], 1.0)
-    track(0, -22, -10, -22, N["LED_FR_OUT"], 1.0)
-    track(20, -22, 5, -22, N["LED_RL_OUT"], 1.0)
-    track(-20, -28, 20, -22, N["LED_RR_OUT"], 1.0)
+    # MOSFET D → J6 (turn signal outputs, 左右各一路)
+    track(-20, -22, -25, -22, N["LED_L_OUT"], 1.0) # Q1.D→J6_1
+    track(0, -22, -10, -22, N["LED_R_OUT"], 1.0)   # Q2.D→J6_2
 
     # Buzzer
     track(0, 5, -25, -15, N["BUZZER"], 0.3)
@@ -777,10 +746,9 @@ def pcb_routing():
     track(2, -8, 30, -10, N["RCW_R"], 0.3)
     track(30, -10, 30, -15, N["RCW_R_LED"], 0.3)
 
-    # Switches
+    # Switches (V2.6: 双闪已移除, 仅 L/R)
     track(0, 8, 25, -10, N["SW_LEFT"], 0.3)
     track(2, 10, 25, -9, N["SW_RIGHT"], 0.3)
-    track(4, 12, 25, -8, N["SW_HAZARD"], 0.3)
 
     return segments
 
@@ -843,13 +811,15 @@ def generate_bom():
 ### MOSFET
 | 编号 | 型号 | 封装 | 数量 | 立创编号 |
 |------|------|------|:--:|----------|
-| Q1-Q4 | IRLZ44N N-MOS | TO-220 (卧装, 引脚折弯) | 4 | C259973 |
+| Q1-Q2 | IRLZ44N N-MOS | TO-220 (卧装, 引脚折弯) | 2 | C259973 |
+
+> ℹ️ V2.6 起同侧前后灯并联驱动, 仅需 2 个 MOSFET。
 
 ### 电阻 (插件/金属膜)
 | 编号 | 阻值 | 封装 | 数量 |
 |------|------|------|:--:|
-| R1-R4 | 100Ω 1/4W | Axial DIN0207 | 4 |
-| RPD1-RPD4 | 10kΩ 1/4W | Axial DIN0207 | 4 |
+| R1-R2 | 100Ω 1/4W | Axial DIN0207 | 2 |
+| RPD1-RPD2 | 10kΩ 1/4W | Axial DIN0207 | 2 |
 | R5-R6 | 220Ω 1/4W | Axial DIN0207 | 2 |
 
 ### LED
@@ -864,8 +834,8 @@ def generate_bom():
 | J2 | 5.08mm 接线端子 | 2 | MKDS 1×2 | 1 |
 | J3 | 2.54mm 排针 | 5 | PinHeader 1×5 | 1 |
 | J4 | 2.54mm 排针 | 3 | PinHeader 1×3 | 1 |
-| J5 | 2.54mm 排针 | 4 | PinHeader 1×4 | 1 |
-| J6_1 ~ J6_4 | 5.08mm 接线端子 | 2×4 | MKDS 1×2 | 4 |
+| J5 | 2.54mm 排针 | 3 (L/R/GND) | PinHeader 1×3 | 1 |
+| J6_1 ~ J6_2 | 5.08mm 接线端子 | 2×2 | MKDS 1×2 | 2 |
 | H1 | 2.54mm 排母 | **2×19 (38PIN)** | PinSocket 2×19 | 1 |
 
 ### ESP32
@@ -900,7 +870,7 @@ def generate_bom():
 │ │ ESP32 38PIN 排母   │               │
 │ └────────────────────┘               │
 │                                      │
-│ [Q1] [Q2] [Q3] [Q4]  [R..] [D1 D2] │ ← 功率区
+│ [Q1] [Q2]  [R..] [D1 D2]            │ ← 功率区
 └──────────────────────────────────────┘
 ```
 
