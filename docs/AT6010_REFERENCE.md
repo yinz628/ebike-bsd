@@ -179,6 +179,18 @@ Boot: "at6010 boot v1.9\r\nNAK\r\ncache on\r\njump to run 0x0"
 
 ---
 
+## 7. 常见问题与调试
+
+| 现象 | 排查方向 |
+|------|---------|
+| 串口无 `5A 09 07 ...` 帧 | 检查 GPIO16/17 是否接反; 波特率确认 921600; 雷达天线面前方净空 |
+| `obj_num` 一直为 0 | 雷达未收到使能命令, 用 `CMD:58D10101...` 手动打开感应 |
+| 角度方向与预期相反 | 检查雷达安装朝向 (180° 安装需在协议层取反, 见 `bsd_protocol.h` 解析) |
+| 校验和失败 (`valid=false`) | 帧被截断, 检查 UART 接线干扰/屏蔽; 降低主循环节奏 |
+| BSD 仅靠近目标触发 | 协议特性 (产品手册确认), 远离目标不上报, 属正常 |
+
+---
+
 ## 8. 工作配置序列 (已验证 2026-06-16)
 
 以下命令序列成功激活 MS60-3015 BSD 主动上报：
@@ -216,11 +228,9 @@ Boot: "at6010 boot v1.9\r\nNAK\r\ncache on\r\njump to run 0x0"
 #define HEAD_RESP    0x59    // 应答帧头
 #define REPORT_TYPE_BSD  0x07  // BSD 上报 TYPE
 
-// LED/RCW
-#define LED_FL_PIN   4       // 左前
-#define LED_FR_PIN   5       // 右前
-#define LED_RL_PIN   18      // 左后
-#define LED_RR_PIN   19      // 右后
+// LED (V2.6: 同侧前后并联, 共 2 路 GPIO)
+#define LED_LEFT_PIN   4     // 左前+左后
+#define LED_RIGHT_PIN  23    // 右前+右后 (原 GPIO5, 启动引脚冲突)
 #define INDICATOR_L  25      // 左侧碰撞警示 LED
 #define INDICATOR_R  26      // 右侧碰撞警示 LED
 #define BUZZER_PIN   12      // 蜂鸣器

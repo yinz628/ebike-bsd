@@ -10,13 +10,13 @@
 |-----------|:--:|------|------|
 | `XL7015` | 1 | U1 | 选 "DC-DC Power Module" |
 | `LM2596` | 1 | U2 | 选 "DC-DC Step Down" |
-| `IRLZ44N` | 4 | Q1-Q4 | 选 TO-220 封装 |
+| `IRLZ44N` | 2 | Q1-Q2 | 选 TO-220 封装 (左右各一) |
 | `Header 2P 5.08` | 3 | J1,J2 | 接线端子 |
 | `Header 5P 2.54` | 1 | J3 | 雷达 |
 | `Header 3P 2.54` | 1 | J4 | 蜂鸣器 |
-| `Header 4P 2.54` | 1 | J5 | 开关 |
-| `Header 8P 5.08` | 1 | J6 | 转向灯输出(4路×2) |
-| `Resistor 100` | 4 | R1-R4 | 选 0805 或 AXIAL-0.3 |
+| `Header 3P 2.54` | 1 | J5 | 开关 (L/R/GND) |
+| `Header 4P 5.08` | 1 | J6 | 转向灯输出(2路×2) |
+| `Resistor 100` | 2 | R1-R2 | 选 0805 或 AXIAL-0.3 |
 | `Resistor 220` | 2 | R5-R6 | |
 | `LED 5mm Red` | 2 | D1-D2 | |
 | `Fuse Holder` | 1 | F1 | 5×20 保险丝座 |
@@ -38,17 +38,17 @@ J3.1(VCC)──+5V    J3.2(GND)──GND    J3.3(OUT)──悬空
 J3.4(RX)──ESP32 GPIO17    J3.5(TX)──ESP32 GPIO16
 ```
 
-### 4路转向灯 (每路相同)
+### 2路转向灯 (同侧前后并联, 每路相同)
 ```
-ESP32 GPIO4──100Ω(R1)──IRLZ44N G(1脚)
-                         D(2脚)──J6.1(接灯负极)
+ESP32 GPIO4──100Ω(R1)──IRLZ44N Q1 G(1脚)
+                         D(2脚)──J6.1(接左侧灯负极, 前+后并联)
                          S(3脚)──GND
         +12V──J6.2(灯正极, 用户外接)
 
-GPIO5──100Ω(R2)──Q2.G, D──J6.3, S──GND, J6.4←+12V
-GPIO18──100Ω(R3)──Q3.G, D──J6.5, S──GND, J6.6←+12V
-GPIO19──100Ω(R4)──Q4.G, D──J6.7, S──GND, J6.8←+12V
+GPIO23──100Ω(R2)──Q2.G, D──J6.3(接右侧灯负极, 前+后并联), S──GND, J6.4←+12V
 ```
+
+> ℹ️ V2.6 起合并为 2 路 (同侧前后灯并联), 原 GPIO5/18/19 不再使用。
 
 ### RCW LED
 ```
@@ -65,9 +65,10 @@ J4.1(VCC)──+5V    J4.2(GND)──GND    J4.3(I/O)──ESP32 GPIO12
 ```
 J5.1(左)──ESP32 GPIO13
 J5.2(右)──ESP32 GPIO14
-J5.3(双闪)──ESP32 GPIO15
-J5.4(GND)──GND
+J5.3(GND)──GND
 ```
+
+> GPIO27 预留 (V2.6 已移除双闪功能)。
 
 ## 步骤 3: 转换为 PCB
 
