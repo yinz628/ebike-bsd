@@ -1,8 +1,8 @@
 # 电动自行车进阶转向灯系统 — 完整设计方案 (单雷达版)
 
-**版本:** V2.7 — WiFi控制台版
-**日期:** 2026-07-07 (更新: BSD参数清理, NVS审计, 配置保存错误检查, 串口DUMP/RESET命令) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认)
-**状态:** ✅ V2.7 | 21参数(NVS持久化) | 后方监测两级报警 | WiFi自动关(30s) | 目标自动消失 | 正确AT6010命令 | BSD已废弃
+**版本:** V2.7 — WiFi控制台 + C3触摸显示
+**日期:** 2026-07-07 (更新: C3显示+触摸配置, WiFi远程开关, 配置刷新同步, BSD参数清理, NVS持久化验证) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认) (更新: GPIO合并, WiFi自动关, 官方4B帧格式确认)
+**状态:** ✅ V2.7 | 21参数(NVS持久化) | C3触摸屏配置 | WiFi远程开关 | 雷达可视化 | 后方监测两级报警 | 目标自动消失 | 正确AT6010命令
 **参考:** [AT6010_REFERENCE.md](AT6010_REFERENCE.md) — 协议帧格式、命令表、BSD帧结构
 **作者:** Hermes Agent (for 许国方)
 
@@ -1038,6 +1038,24 @@ board_build.partitions = default_ffat.csv
 | 空闲检测精度 | 检查间隔从 5s → 2s, 断开响应更快 |
 | 配置字段 | 从 28 字段(含废弃BSD)精简为 **21 字段** (RCW 10 + TURN 6 + SYS 3 + RADAR 2) |
 | factoryReset | 同时重置 sys 参数组(之前遗漏) |
+
+### 🖥️ C3 触摸显示面板 (新增)
+
+| 项目 | 说明 |
+|------|------|
+| 硬件 | ESP32-C3 (立创实战派) + ST7789 320x240 + FT6336 触摸 |
+| 显示屏 | 全屏120°雷达扇形图, 4条距离弧线, ±40°虚线边界 |
+| 目标显示 | 实时红点 + 速度标签 (m/s), 每秒5次更新 |
+| 配置界面 | 4页触摸参数设置 (RCW1/RCW2/TURN/SYS) |
+| 参数调整 | +/- 大按钮, 字体大小2, 防误触 |
+| WiFi 控制 | SYS页 ON/OFF 按钮, 远程开关 ESP32 WiFi |
+| 配置同步 | REFRESH 按钮从 ESP32 读取当前参数 |
+| SAVE->ESP | 保存配置到 ESP32 NVS, 大字 SAVED! 确认 |
+| 通信协议 | UART1 115200bps, GPIO18/19 双向通信 |
+| 数据包格式 | 心跳包(AA FF bsd rcw bz turn 55) + 目标包(AA NN angle range velo×N 55) |
+| 配置协议 | $CFG(保存), $GETCFG(请求), $WIFI(开关) |
+| SPI | 硬件SPI (SCLK=3,MOSI=5), 速度快 |
+| I2C | 触摸FT6336 (SDA=0,SCL=1, ADDR=0x38) |
 
 ### 📁 文件变更
 
