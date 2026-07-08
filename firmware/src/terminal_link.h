@@ -9,7 +9,6 @@
 #define TERMINAL_LINK_H
 
 #include <Arduino.h>
-#include <driver/uart.h>
 #include "bsd_protocol.h"
 #include "ms60_radar.h"
 #include "config_store.h"
@@ -23,17 +22,19 @@ extern bool rcw_l_active, rcw_r_active;
 extern int ind_left_mode, ind_right_mode;
 
 // ============ 引脚 ============
-// UART1: 用 GPIO5(TX)/GPIO2(RX)
-// ⚠ 原 GPIO21/22 已废弃: 这两个脚 (原 OLED I2C SDA/SCL) 输出驱动物理损坏,
-//    方波测试量得 0V (正常应 ~1.5V), 无法驱动 UART TX 信号.
-//    实测主控仅 GPIO2/5/15 输出正常, 故 UART1 改用 GPIO5(TX)/GPIO2(RX).
+// UART1: GPIO18(TX)/GPIO19(RX) — 已由 v2.7-c3-display 实测验证可稳定传输
+// 历史:
+//   - 原 GPIO21/22 (OLED I2C 脚) 输出驱动物理损坏, 方波测试 0V, 弃用
+//   - 曾用 GPIO5(TX)/GPIO2(RX): GPIO2 是 strapping 引脚 (启动时电平影响 Flash
+//     模式), 做 UART TX 会引入噪声, 实测不稳定
+//   - GPIO18/GPIO19 为通用 IO, 无 strapping 约束, v2.7-c3-display 已验证通过
 // 接线:
-//   主控 TX(GPIO5)  ──→ C3 RX(GPIO18)
-//   主控 RX(GPIO2)  ←── C3 TX(GPIO19)
+//   主控 TX(GPIO18) ──→ C3 RX(GPIO19)
+//   主控 RX(GPIO19) ←── C3 TX(GPIO18)
 //   GND ────────────── GND (必须共地)
 #define TERM_UART_NUM     1
-#define TERM_TX_PIN       5
-#define TERM_RX_PIN       2
+#define TERM_TX_PIN       18
+#define TERM_RX_PIN       19
 #define TERM_BAUD         115200
 
 // 推送周期 (与主循环对齐)
@@ -101,12 +102,12 @@ public:
 
     void init() {
         _serial = &Serial1;
-        // ESP32 UART1: 用 IDF uart_set_pin 强制绑定引脚
+        // ESP32 UART1: begin() 已内部完成引脚绑定, 不再额外调 uart_set_pin()
+        // (历史教训: 重复调用在某些引脚上会与 begin() 配置冲突, v2.7-c3-display
+        //  的成功方案只用 begin(), 故此处对齐)
         _serial->end();
         _serial->begin(TERM_BAUD, SERIAL_8N1, TERM_RX_PIN, TERM_TX_PIN);
-        uart_set_pin(UART_NUM_1, TERM_TX_PIN, TERM_RX_PIN,
-                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=GPIO5/RX=GPIO2)");
+        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=GPIO18/RX=GPIO19)");
     }
 
     // 主循环调用: 推送状态 + 接收命令

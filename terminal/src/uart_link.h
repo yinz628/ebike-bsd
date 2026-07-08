@@ -2,10 +2,11 @@
 //  uart_link.h - C3 终端 UART 有线通信 (与主控 terminal_link.h 对接)
 //
 //  通道: C3 UART1 = GPIO18(TX)/GPIO19(RX) (多功能口, 需 USB_HID_ON_BOOT=0 释放)
-//  接线:
-//    主控 GPIO21 (TX) ──→ C3 GPIO18 (RX)
-//    主控 GPIO22 (RX) ←── C3 GPIO19 (TX)
-//    GND ──────────────── GND
+//  接线 (与主控 terminal_link.h 的 GPIO18/19 交叉对接):
+//    主控 TX(GPIO18) ──→ C3 RX(GPIO19)
+//    主控 RX(GPIO19) ←── C3 TX(GPIO18)
+//    GND ────────────── GND
+//  (历史: 曾用主控 GPIO5/2, GPIO2 是 strapping 脚, UART 不稳; 改 18/19 已验证)
 //
 //  协议 (ASCII 文本帧, 与 terminal_link.h 一致):
 //    主控→C3:  $S,obj_num,bz,rcw_l,rcw_r,ind_l,ind_r,turn,rx_bytes,valid,t1_range,t1_angle,t1_velo,t1_id,...\n
@@ -106,11 +107,35 @@ public:
     UartLink() : _serial(nullptr), _last_rx(0) {}
 
     void init() {
-        // C3 UART1: GPIO19=RX, GPIO18=TX (反向, 匹配实测可用的接线)
+        // C3 UART1: GPIO19=RX, GPIO18=TX (与主控 GPIO18/19 交叉对接)
         Serial1.end();
         Serial1.begin(TERM_BAUD, SERIAL_8N1, 19, 18);  // RX=19, TX=18
         _serial = &Serial1;
         Serial.println("[UART] 终端链路就绪 (115200, RX=19/TX=18)");
+    }
+
+    // 主控离线时填入模拟数据, 用于在无主控连接时验证显示视图
+    // (3 个目标 + 各状态字段, 模拟接近/远离场景)
+    void loadDemoData() {
+        state.reset();
+        state.obj_num = 3;
+        state.bz_mode = 1;        // BSD 短鸣
+        state.ind_l = 1;          // 左 BSD 慢闪
+        state.ind_r = 2;          // 右 RCW 快闪
+        state.turn = 0;
+        state.rcw_l = false;
+        state.rcw_r = true;
+        state.valid = true;
+        state.rx_bytes = 12345;
+        state.det_range = 25;
+        // 目标 0: 左后方接近 (负角=左, 15m, +3m/s 接近)
+        state.objs[0] = { 15, -28, 3, 0 };
+        // 目标 1: 正后方中距 (0°, 20m, +1m/s)
+        state.objs[1] = { 20, 0, 1, 1 };
+        // 目标 2: 右后方远离 (正角=右, 35m, -2m/s 远离)
+        state.objs[2] = { 35, 25, -2, 2 };
+        state.last_frame_ms = millis();
+        state.online = false;     // demo 模式标记为离线 (状态条显示 OFFLINE)
     }
 
     // 主循环调用: 读主控发来的 $S 帧

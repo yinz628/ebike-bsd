@@ -1,10 +1,10 @@
 // ============================================================
 //  c3_terminal.ino - ebike-bsd 车把显示终端 (立创·实战派 ESP32-C3)
-//  通信: UART1 (GPIO18/19) ← 主控 ESP32-32D UART1 (GPIO21/22)
+//  通信: UART1 (GPIO18/19) ← 主控 ESP32-32D UART1 (GPIO18/19 交叉)
 //        $S 状态帧 10Hz 推送, $C 命令上行; 延迟 ~10ms
 //  分阶段实现:
-//    P1: UART 连接 + 收 $S 帧 + 串口打印
-//    P2: 屏幕显示雷达扇形图
+//    P1: UART 连接 + 收 $S 帧 + 串口打印     ✓
+//    P2: 屏幕显示雷达扇形图                   ← 当前
 //    P3: 触摸切页 + 参数配置
 //    P4: ES8311 报警音同步
 // ============================================================
@@ -18,11 +18,14 @@ LGFX lcd;
 UartLink netLink;
 
 // 分阶段开关 (开发时按需注释, 验证完逐个打开)
-#define ENABLE_DISPLAY        // P1: 屏幕初始化 (静态测试画面)
-// #define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
+#define ENABLE_DISPLAY        // P1: 屏幕初始化
+#define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
 // #define ENABLE_STATUS_VIEW    // P3: 状态页
 // #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
 // #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
+
+// 主控离线时显示模拟数据 (验证视图用; 接上主控后自动切换真实数据)
+#define DEMO_WHEN_OFFLINE
 
 #ifdef ENABLE_RADAR_VIEW
 #include "radar_view.h"
@@ -80,50 +83,15 @@ void setup() {
     lcd.init();
     lcd.initDMA();
 
-    // 静态测试画面: 验证颜色、方向、分辨率
-    lcd.fillScreen(lgfx::color888(13, 17, 23));      // 深蓝黑背景
-
-    // 标题 (蓝色)
-    lcd.setTextColor(lgfx::color888(88, 166, 255));
-    lcd.setTextSize(2);
-    lcd.setCursor(20, 10);
-    lcd.print("eBike-BSD C3");
-
-    // 分辨率标注 (横屏应为 320x240)
-    lcd.setTextSize(1);
-    lcd.setTextColor(lgfx::color888(139, 148, 158));
-    lcd.setCursor(20, 32);
-    lcd.printf("%dx%d", lcd.width(), lcd.height());
-
-    // 三色条 (验证红蓝不反): 红 黄 绿
-    lcd.fillRect(20, 50, 80, 30, lgfx::color888(248, 81, 73));    // 红
-    lcd.fillRect(120, 50, 80, 30, lgfx::color888(210, 153, 34));  // 黄
-    lcd.fillRect(220, 50, 80, 30, lgfx::color888(63, 185, 80));   // 绿
-    lcd.setTextColor(lgfx::color888(255, 255, 255));
-    lcd.setCursor(40, 60); lcd.print("R");
-    lcd.setCursor(155, 60); lcd.print("Y");
-    lcd.setCursor(255, 60); lcd.print("G");
-
-    // 四角标记 (验证分辨率边界 + 方向)
-    lcd.setTextColor(lgfx::color888(201, 209, 217));
-    lcd.setCursor(2, 2); lcd.print("TL");           // 左上
-    lcd.setCursor(lcd.width()-22, 2); lcd.print("TR");  // 右上
-    lcd.setCursor(2, lcd.height()-12); lcd.print("BL"); // 左下
-    lcd.setCursor(lcd.width()-22, lcd.height()-12); lcd.print("BR"); // 右下
-
-    // 中间圆 + 三角 (验证几何绘制)
-    int cx = lcd.width()/2, cy = 150;
-    lcd.drawCircle(cx, cy, 25, lgfx::color888(88, 166, 255));
-    lcd.fillTriangle(cx-20, cy+40, cx+20, cy+40, cx, cy+10, lgfx::color888(210, 153, 34));
-
-    // 底部状态
-    lcd.setTextColor(lgfx::color888(63, 185, 80));
-    lcd.setCursor(20, lcd.height()-20);
-    lcd.print("Screen OK - touch/sound TBD");
-
-    Serial.println("[LCD] 测试画面已绘制 (三色条+四角标记+几何)");
+    Serial.printf("[LCD] %dx%d 初始化完成\n", lcd.width(), lcd.height());
 #else
     Serial.println("[INIT] 屏幕未启用. 定义 ENABLE_DISPLAY 开启屏幕");
+#endif
+
+    // 主控离线时加载模拟数据 (验证雷达图视图)
+#ifdef DEMO_WHEN_OFFLINE
+    netLink.loadDemoData();
+    Serial.println("[DEMO] 已加载模拟目标数据 (主控离线时显示)");
 #endif
 
     updatePages();
@@ -173,7 +141,7 @@ void loop() {
                       netLink.state.online ? (millis() - netLink.state.last_frame_ms) : 0);
     }
 
-    delay(20);   // ~50fps 刷新
+    delay(66);   // ~15fps 刷新 (主控 $S 推送 10Hz, 无需更快; 减少 SPI 总线占用防撕裂)
 }
 
 // ============ 触摸处理 ============
