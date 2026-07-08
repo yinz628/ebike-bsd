@@ -23,6 +23,8 @@ bool bsd,rcw; int bz,turn;
 #define DETRANGE 40
 bool bg_drawn=false, inCfg=false;
 int tx=0,ty=0; bool touched=false;
+unsigned long last_rx_ms=0;        // 最后一次收到ESP32数据的时间戳
+#define CONN_TOUT 1500             // 超过1.5秒无数据视为断开
 
 struct {
   int rcw_low=2,rcw_speed=3,rcw_range=25,rcw_hold=3000,rcw_lflash=500,rcw_flash=125;
@@ -73,6 +75,8 @@ void drawBg(){
     tft.drawPixel(CX+r*cos(base+b40),CY+r*sin(base+b40),ST77XX_BLUE);tft.drawPixel(CX+r*cos(base),CY+r*sin(base),DK);}
   tft.fillTriangle(CX-6,CY-10,CX,CY-20,CX+6,CY-10,ST77XX_CYAN);tft.fillRect(CX-4,CY-10,8,8,ST77XX_CYAN);
   tft.setTextSize(1);tft.setCursor(2,2);tft.print("BSD v2.9");
+  // 连接状态指示（初始:断开）
+  tft.fillCircle(52,8,4,RED);tft.setTextColor(RED);tft.setCursor(60,2);tft.print("LOST");
   btn(250,2,65,22,"SET",ST77XX_BLUE,2);
   tft.setTextColor(cfg.wifi_on?GRN:RED);tft.setCursor(210,5);tft.print(cfg.wifi_on?"WiFi":"NO_WiFi");
   bg_drawn=true;
@@ -206,8 +210,8 @@ void loop(){
     if(!Serial1.available())continue;
     uint8_t type=Serial1.read(),buf[12];int n=0;t0=millis();
     while(n<12&&millis()-t0<20){if(Serial1.available())buf[n++]=Serial1.read();}
-    if(type==0xFF&&n>=4){bsd=buf[0];rcw=buf[1];bz=buf[2];turn=buf[3];upd=true;}
-    else if(type<=4&&n>=type*3){tgt_n=type;for(int i=0;i<type&&i<4;i++){tgt[i].angle=(int8_t)buf[i*3];tgt[i].range=buf[i*3+1];tgt[i].velocity=(int8_t)buf[i*3+2];}upd=true;}
+    if(type==0xFF&&n>=4){bsd=buf[0];rcw=buf[1];bz=buf[2];turn=buf[3];upd=true;last_rx_ms=millis();}
+    else if(type<=4&&n>=type*3){tgt_n=type;for(int i=0;i<type&&i<4;i++){tgt[i].angle=(int8_t)buf[i*3];tgt[i].range=buf[i*3+1];tgt[i].velocity=(int8_t)buf[i*3+2];}upd=true;last_rx_ms=millis();}
   }
   
   touched=readTouch(&tx,&ty);
@@ -234,6 +238,12 @@ void loop(){
 void draw(){
   if(inCfg)return;
   if(!bg_drawn)drawBg();
+  // 连接状态指示（动态更新）
+  bool conn=(millis()-last_rx_ms<CONN_TOUT);
+  tft.fillRect(52,0,80,14,BG);                          // 清除旧指示
+  tft.fillCircle(52,8,4,conn?GRN:RED);                   // 绿点=已连 红点=断开
+  tft.setTextSize(1);tft.setTextColor(conn?GRN:RED);
+  tft.setCursor(60,2);tft.print(conn?"ON":"LOST");
   // 加大清除矩形 (50+50=100宽, 覆盖任何标签)
   for(int i=0;i<tgt_n_old;i++){float ar=tgt_old[i].angle*PI/180;int r=(int)((float)tgt_old[i].range/DETRANGE*MAXR);if(r>MAXR)r=MAXR;
     int ox=constrain(CX+r*sin(ar),6,314),oy=constrain(CY+r*cos(ar),10,CY+MAXR+10);
