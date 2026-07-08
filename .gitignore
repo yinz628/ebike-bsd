@@ -15,3 +15,7 @@ Thumbs.db
 *.swo
 *~
 __pycache__/
+merged-binary.bin
+
+# 立创实战派 C3 官方资料 (26MB, 不进仓库; 需要时从 wiki 下载)
+esp32-c3/

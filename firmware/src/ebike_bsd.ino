@@ -37,9 +37,8 @@
 #define INDICATOR_L_PIN    25   // 左后碰撞指示灯
 #define INDICATOR_R_PIN    26   // 右后碰撞指示灯
 
-// OLED I2C (可选)
-#define OLED_SDA_PIN       21
-#define OLED_SCL_PIN       22
+// 注: 原 OLED I2C 定义 (GPIO21 SDA / GPIO22 SCL) 已删除
+// 主控不接 OLED, 这两个脚现在给 UART1 (terminal_link.h) 用作 TX/RX 连接车把 C3 终端
 
 // ============ 常量 ============
 #define BLINK_INTERVAL_NORMAL   667   // 1.5Hz 正常闪烁 (ms)

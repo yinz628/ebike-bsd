@@ -1,0 +1,6 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# 与出厂固件一致的分区布局 (factory 单区 + phy_init)
+# 解决 default_8MB.csv 缺 phy_init 分区 → WiFi 初始化 panic 的 boot loop
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x600000,

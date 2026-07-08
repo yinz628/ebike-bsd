@@ -1,20 +1,22 @@
 // ============================================================
 //  config_view.h - 参数配置页 (Page 2) + FT6336 触摸调参
-//  显示可调参数 + [</>] 按钮, 触摸修改后 POST 到主控 /api/config
+//  显示可调参数 + [</>] 按钮, 触摸修改后通过 UART 发 $C,key=value 到主控
 // ============================================================
 #pragma once
 #include "lgfx_config.hpp"
-#include "net_link.h"
+#include "uart_link.h"
 
 extern LGFX lcd;
-extern NetLink netLink;
+extern UartLink netLink;
 
 class ConfigView {
 private:
-    // 参数定义: group (主控 JSON 顶层), jsonkey (JSON 字段), 显示名, 当前值, 步长, 最小, 最大, 单位
+    // 参数定义: group (UI 分组), key (主控 terminal_link.h 识别的键名),
+    //           显示名, 当前值, 步长, 最小, 最大, 单位
+    // ⚠ key 必须与主控 terminal_link.h applyCommand() 里的键名完全一致
     struct Param {
         const char *group;
-        const char *jsonkey;
+        const char *key;
         const char *label;
         int value;
         int step;
@@ -24,11 +26,11 @@ private:
 
     static const int NPARAM = 5;
     Param params[NPARAM] = {
-        {"rcw",   "speed",        "RCW高警告速度", 3,    1, 1,  10, "m/s"},
-        {"rcw",   "range",        "RCW距离上限",   25,   5, 5,  50, "m"},
-        {"radar", "sensitivity",  "雷达灵敏度",     2,    1, 0,  10, "档"},
-        {"rcw",   "low_speed",    "RCW低警告速度", 2,    1, 0,   5, "m/s"},
-        {"sys",   "bsd_beep_cooldown", "蜂鸣冷却", 5000, 500, 1000, 10000, "ms"},
+        {"rcw",   "rcw_speed",  "RCW高警告速度", 3,    1, 1,  10, "m/s"},
+        {"rcw",   "rcw_range",  "RCW距离上限",   25,   5, 5,  50, "m"},
+        {"radar", "sensitivity","雷达灵敏度",     2,    1, 0,  10, "档"},
+        {"rcw",   "rcw_low",    "RCW低警告速度", 2,    1, 0,   5, "m/s"},
+        {"sys",   "beep_cool",  "蜂鸣冷却",      5000, 500, 1000, 10000, "ms"},
     };
 
     int selected = 0;   // 当前选中项索引
@@ -128,7 +130,7 @@ public:
         if (ty >= by && ty <= by + 20 && tx >= 10 && tx <= 130) {
             if (dirty) {
                 for (int i = 0; i < NPARAM; i++) {
-                    netLink.sendConfig(params[i].group, params[i].jsonkey, params[i].value);
+                    netLink.sendConfig(params[i].group, params[i].key, params[i].value);
                     delay(20);
                 }
                 dirty = false;
@@ -155,7 +157,7 @@ private:
         if (nv != params[i].value) {
             params[i].value = nv;
             dirty = true;
-            Serial.printf("[CFG] %s.%s = %d\n", params[i].group, params[i].jsonkey, nv);
+            Serial.printf("[CFG] %s.%s = %d\n", params[i].group, params[i].key, nv);
         }
     }
 

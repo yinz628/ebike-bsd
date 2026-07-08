@@ -1,9 +1,9 @@
 // ============================================================
 //  c3_terminal.ino - ebike-bsd 车把显示终端 (立创·实战派 ESP32-C3)
-//  通信: WiFi STA → 主控 AP (eBike-BSD), HTTP GET /api/status
-//        延迟 ~200ms, 对显示足够 (报警音同步靠 buzzer 字段)
+//  通信: UART1 (GPIO18/19) ← 主控 ESP32-32D UART1 (GPIO21/22)
+//        $S 状态帧 10Hz 推送, $C 命令上行; 延迟 ~10ms
 //  分阶段实现:
-//    P1: WiFi 连接 + HTTP 取数据 + 串口打印
+//    P1: UART 连接 + 收 $S 帧 + 串口打印
 //    P2: 屏幕显示雷达扇形图
 //    P3: 触摸切页 + 参数配置
 //    P4: ES8311 报警音同步
@@ -11,14 +11,14 @@
 
 #include <Arduino.h>
 #include "lgfx_config.hpp"
-#include "net_link.h"
+#include "uart_link.h"
 
 // 全局对象
 LGFX lcd;
-NetLink netLink;
+UartLink netLink;
 
 // 分阶段开关 (开发时按需注释, 验证完逐个打开)
-// P1 阶段: 全关, 只验证 WiFi 通信 + 基础启动 (屏幕暂不画)
+#define ENABLE_DISPLAY        // P1: 屏幕初始化 (静态测试画面)
 // #define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
 // #define ENABLE_STATUS_VIEW    // P3: 状态页
 // #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
@@ -70,22 +70,60 @@ void setup() {
     // UART 链路 (接主控) — P1 阶段核心, 必须先于屏幕验证
     netLink.init();
 
-    // 屏幕 (用 ENABLE_DISPLAY 开关控制, P1 阶段先关掉, 避免屏幕驱动问题阻塞通信验证)
+    // 屏幕 (ENABLE_DISPLAY: 第1步验证屏幕点亮 + 颜色/方向)
 #ifdef ENABLE_DISPLAY
+    // ⚠ 背光: 实战派 C3 的背光 GPIO2 是低电平点亮 (官方 BK_LIGHT_ON_LEVEL=0)
+    //   LovyanGFX 的 Light_PWM 默认高电平, 会反向. 先手动拉低点亮背光.
+    pinMode(2, OUTPUT);
+    digitalWrite(2, LOW);   // 低电平点亮背光
+
     lcd.init();
     lcd.initDMA();
-    lcd.setBrightness(180);     // 0-255, 适中亮度
-    lcd.fillScreen(lgfx::color888(13, 17, 23));
+
+    // 静态测试画面: 验证颜色、方向、分辨率
+    lcd.fillScreen(lgfx::color888(13, 17, 23));      // 深蓝黑背景
+
+    // 标题 (蓝色)
     lcd.setTextColor(lgfx::color888(88, 166, 255));
     lcd.setTextSize(2);
-    lcd.setCursor(40, 100);
-    lcd.print("eBike-BSD");
+    lcd.setCursor(20, 10);
+    lcd.print("eBike-BSD C3");
+
+    // 分辨率标注 (横屏应为 320x240)
     lcd.setTextSize(1);
-    lcd.setCursor(60, 130);
-    lcd.print("C3 Terminal booting...");
-    lcd.display();
+    lcd.setTextColor(lgfx::color888(139, 148, 158));
+    lcd.setCursor(20, 32);
+    lcd.printf("%dx%d", lcd.width(), lcd.height());
+
+    // 三色条 (验证红蓝不反): 红 黄 绿
+    lcd.fillRect(20, 50, 80, 30, lgfx::color888(248, 81, 73));    // 红
+    lcd.fillRect(120, 50, 80, 30, lgfx::color888(210, 153, 34));  // 黄
+    lcd.fillRect(220, 50, 80, 30, lgfx::color888(63, 185, 80));   // 绿
+    lcd.setTextColor(lgfx::color888(255, 255, 255));
+    lcd.setCursor(40, 60); lcd.print("R");
+    lcd.setCursor(155, 60); lcd.print("Y");
+    lcd.setCursor(255, 60); lcd.print("G");
+
+    // 四角标记 (验证分辨率边界 + 方向)
+    lcd.setTextColor(lgfx::color888(201, 209, 217));
+    lcd.setCursor(2, 2); lcd.print("TL");           // 左上
+    lcd.setCursor(lcd.width()-22, 2); lcd.print("TR");  // 右上
+    lcd.setCursor(2, lcd.height()-12); lcd.print("BL"); // 左下
+    lcd.setCursor(lcd.width()-22, lcd.height()-12); lcd.print("BR"); // 右下
+
+    // 中间圆 + 三角 (验证几何绘制)
+    int cx = lcd.width()/2, cy = 150;
+    lcd.drawCircle(cx, cy, 25, lgfx::color888(88, 166, 255));
+    lcd.fillTriangle(cx-20, cy+40, cx+20, cy+40, cx, cy+10, lgfx::color888(210, 153, 34));
+
+    // 底部状态
+    lcd.setTextColor(lgfx::color888(63, 185, 80));
+    lcd.setCursor(20, lcd.height()-20);
+    lcd.print("Screen OK - touch/sound TBD");
+
+    Serial.println("[LCD] 测试画面已绘制 (三色条+四角标记+几何)");
 #else
-    Serial.println("[INIT] 屏幕未启用 (P1: 仅 UART 验证). 定义 ENABLE_DISPLAY 开启屏幕");
+    Serial.println("[INIT] 屏幕未启用. 定义 ENABLE_DISPLAY 开启屏幕");
 #endif
 
     updatePages();

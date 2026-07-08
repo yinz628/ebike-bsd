@@ -23,13 +23,17 @@ extern bool rcw_l_active, rcw_r_active;
 extern int ind_left_mode, ind_right_mode;
 
 // ============ 引脚 ============
-// UART1: 用 GPIO21(TX)/GPIO22(RX), 原为 OLED I2C 脚 (本项目未用 OLED, 空闲)
-// 避免 GPIO27 (WROVER 模块上被 PSRAM 占用) 和 GPIO32 (部分板子受限)
-// 主控 TX(GPIO21) → C3 RX(GPIO18)
-// 主控 RX(GPIO22) ← C3 TX(GPIO19)
+// UART1: 用 GPIO5(TX)/GPIO2(RX)
+// ⚠ 原 GPIO21/22 已废弃: 这两个脚 (原 OLED I2C SDA/SCL) 输出驱动物理损坏,
+//    方波测试量得 0V (正常应 ~1.5V), 无法驱动 UART TX 信号.
+//    实测主控仅 GPIO2/5/15 输出正常, 故 UART1 改用 GPIO5(TX)/GPIO2(RX).
+// 接线:
+//   主控 TX(GPIO5)  ──→ C3 RX(GPIO18)
+//   主控 RX(GPIO2)  ←── C3 TX(GPIO19)
+//   GND ────────────── GND (必须共地)
 #define TERM_UART_NUM     1
-#define TERM_TX_PIN       21
-#define TERM_RX_PIN       22
+#define TERM_TX_PIN       5
+#define TERM_RX_PIN       2
 #define TERM_BAUD         115200
 
 // 推送周期 (与主循环对齐)
@@ -97,12 +101,12 @@ public:
 
     void init() {
         _serial = &Serial1;
-        // ESP32 UART1: Arduino setPins 在某些 Core 版本不生效, 用 IDF uart_set_pin 强制绑定
+        // ESP32 UART1: 用 IDF uart_set_pin 强制绑定引脚
         _serial->end();
         _serial->begin(TERM_BAUD, SERIAL_8N1, TERM_RX_PIN, TERM_TX_PIN);
         uart_set_pin(UART_NUM_1, TERM_TX_PIN, TERM_RX_PIN,
                      UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=21/RX=22)");
+        Serial.println("[TERM] UART1 终端链路就绪 (115200, TX=GPIO5/RX=GPIO2)");
     }
 
     // 主循环调用: 推送状态 + 接收命令
@@ -154,16 +158,19 @@ private:
         frame += ind_right_mode;      frame += ',';
         frame += (int)turn_state;     frame += ',';
         frame += radar.getTotalBytes(); frame += ',';
-        frame += (f->valid ? 1:0);    frame += ',';
+        frame += (f->valid ? 1:0);
 
-        // 各目标: range,angle,velo,id
+        // 各目标: range,angle,velo,id (每个目标前加逗号, 避免无目标时尾逗号)
         int n = min((int)f->obj_num, BSD_MAX_OBJECTS);
         for (int i = 0; i < n; i++) {
-            frame += f->objects[i].range;    frame += ',';
-            frame += f->objects[i].angle;    frame += ',';
-            frame += f->objects[i].velocity; frame += ',';
+            frame += ',';
+            frame += f->objects[i].range;
+            frame += ',';
+            frame += f->objects[i].angle;
+            frame += ',';
+            frame += f->objects[i].velocity;
+            frame += ',';
             frame += f->objects[i].objId;
-            if (i < n - 1) frame += ',';
         }
         frame += '\n';
 
