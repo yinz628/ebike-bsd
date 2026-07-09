@@ -15,13 +15,45 @@ extern LGFX lcd;
 
 class RadarView {
 private:
-    LGFX_Sprite _bg;          // 静态背景缓存 (含扇形/标注/本车)
+    LGFX_Sprite _bg;          // 静态背景缓存 (含扇形/标注/本车/翻页按钮)
     bool _bg_ready = false;   // 背景是否已渲染
     int _last_w = 0, _last_h = 0;
 
     // 扇形几何参数 (缓存, 避免重复计算)
     int _cx = 0, _cy = 0, _maxR = 0;
     static const int _detRange = 40;   // 最大显示距离 (m), 与主控 config.rcw.range_limit 对齐
+
+    // 防闪屏: 脏标志 + 目标摘要. 仅当目标/状态变化或切页时重绘, 触摸不触发重绘.
+    bool _dirty = true;
+    // 目标摘要 (4个目标 × 3字段, 打包比较)
+    int8_t  _sum_tgt[12] = {0};
+    uint8_t _sum_obj = 0xFF, _sum_bz = 0xFF, _sum_indl = 0xFF, _sum_indr = 0xFF, _sum_turn = 0xFF;
+    bool    _sum_online = false;
+
+    bool summaryChanged(const TerminalState &st) {
+        if (st.obj_num != _sum_obj || st.bz_mode != _sum_bz || st.ind_l != _sum_indl
+            || st.ind_r != _sum_indr || st.turn != _sum_turn || st.online != _sum_online)
+            return true;
+        int n = min((int)st.obj_num, 4);
+        for (int i = 0; i < n; i++) {
+            int b = i * 3;
+            if (st.objs[i].range    != _sum_tgt[b])   return true;
+            if (st.objs[i].angle    != _sum_tgt[b+1]) return true;
+            if (st.objs[i].velocity != _sum_tgt[b+2]) return true;
+        }
+        return false;
+    }
+    void saveSummary(const TerminalState &st) {
+        _sum_obj = st.obj_num; _sum_bz = st.bz_mode; _sum_indl = st.ind_l;
+        _sum_indr = st.ind_r; _sum_turn = st.turn; _sum_online = st.online;
+        int n = min((int)st.obj_num, 4);
+        for (int i = 0; i < n; i++) {
+            int b = i * 3;
+            _sum_tgt[b]   = st.objs[i].range;
+            _sum_tgt[b+1] = st.objs[i].angle;
+            _sum_tgt[b+2] = st.objs[i].velocity;
+        }
+    }
 
     // 预渲染静态背景到 Sprite
     void buildBackground() {
@@ -78,12 +110,18 @@ private:
         _bg.setCursor(_cx - 8, _cy - 18);
         _bg.print("^^");
 
+        // 顶部翻页按钮 ‹ › (固定在左右上角)
+        drawNavBtn(_bg, false);
+        drawNavBtn(_bg, true);
+
         _bg_ready = true;
         _last_w = w;
         _last_h = h;
     }
 
 public:
+    void markDirty() { _dirty = true; }   // 切页时调用, 强制重绘
+
     void draw(const TerminalState &st) {
         int w = lcd.width();
         int h = lcd.height();
@@ -92,6 +130,11 @@ public:
         if (!_bg_ready || w != _last_w || h != _last_h) {
             buildBackground();
         }
+
+        // 防闪屏: 仅当目标/状态变化或切页时重绘 (触摸不触发, demo 数据静态则不闪)
+        if (!_dirty && !summaryChanged(st)) return;
+        _dirty = false;
+        saveSummary(st);
 
         lcd.startWrite();       // 整帧原子提交, 避免 SPI 分段撕裂
 

@@ -10,6 +10,7 @@
 // ============================================================
 
 #include <Arduino.h>
+#include <Wire.h>
 #include "lgfx_config.hpp"
 #include "uart_link.h"
 
@@ -17,12 +18,40 @@
 LGFX lcd;
 UartLink netLink;
 
+// ============ FT6336 触摸裸 I2C 读取 ============
+// 不用 LovyanGFX 内置驱动 (横屏旋转坐标有偏移), 直接读 FT6336 寄存器 + 手动变换
+//
+// 实测原始坐标范围 (本屏, offset_rotation=1):
+//   raw_x ∈ [25, 212]   (物理上下方向, 上=212 下=25, 跨度187)
+//   raw_y ∈ [0, 317]    (物理左右方向, 左=0 右=317)
+// 映射到横屏 320×240:
+//   屏幕X(0~319) = raw_y                         (直接对应, 范围吻合)
+//   屏幕Y(0~239) = (212 - raw_x) * 239 / 187     (翻转 + 线性缩放)
+bool readTouch(int *x, int *y) {
+    Wire.beginTransmission(TOUCH_ADDR);
+    Wire.write(0x02);                          // 寄存器 0x02 起 = 触摸点1数据
+    if (Wire.endTransmission(false) != 0) return false;
+    Wire.requestFrom((uint8_t)TOUCH_ADDR, (uint8_t)6);
+    if (Wire.available() < 6) return false;
+    uint8_t buf[6];
+    for (int i = 0; i < 6; i++) buf[i] = Wire.read();
+    if (buf[0] == 0) return false;             // buf[0]=触摸点数, 0=无触摸
+    int raw_x = ((buf[1] & 0x0F) << 8) | buf[2];
+    int raw_y = ((buf[3] & 0x0F) << 8) | buf[4];
+    // 横屏坐标变换 (实测校准)
+    *x = raw_y;
+    *y = (212 - raw_x) * 239 / 187;
+    if (*x < 0) *x = 0;  if (*x > 319) *x = 319;
+    if (*y < 0) *y = 0;  if (*y > 239) *y = 239;
+    return true;
+}
+
 // 分阶段开关 (开发时按需注释, 验证完逐个打开)
 #define ENABLE_DISPLAY        // P1: 屏幕初始化
 #define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
-// #define ENABLE_STATUS_VIEW    // P3: 状态页
-// #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
-// #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
+#define ENABLE_STATUS_VIEW    // P3: 状态页
+#define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
+#define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
 
 // 主控离线时显示模拟数据 (验证视图用; 接上主控后自动切换真实数据)
 #define DEMO_WHEN_OFFLINE
@@ -50,7 +79,6 @@ AlertSound alertSound;
 // ============ 触摸/切页状态 ============
 int currentPage = 0;        // 0=雷达图 1=状态 2=配置
 int totalPages   = 1;        // 随分阶段开关增加
-unsigned long lastTouchMs = 0;
 int lastTouchX = -1, lastTouchY = -1;
 
 void updatePages() {
@@ -83,6 +111,10 @@ void setup() {
     lcd.init();
     lcd.initDMA();
 
+    // I2C 总线初始化 (触摸 FT6336 / ES8311 / 传感器共用, SDA=0/SCL=1)
+    Wire.begin(TOUCH_SDA, TOUCH_SCL);
+    Wire.setClock(100000);
+
     Serial.printf("[LCD] %dx%d 初始化完成\n", lcd.width(), lcd.height());
 #else
     Serial.println("[INIT] 屏幕未启用. 定义 ENABLE_DISPLAY 开启屏幕");
@@ -94,11 +126,19 @@ void setup() {
     Serial.println("[DEMO] 已加载模拟目标数据 (主控离线时显示)");
 #endif
 
+    // ES8311 报警音 (I2C 总线需在 lcd.init 之后, 共用 SDA=0/SCL=1)
+#ifdef ENABLE_ALERT_SOUND
+    alertSound.init();
+#endif
+
     updatePages();
     Serial.printf("[INIT] 页面数: %d\n", totalPages);
 }
 
 // ============ LOOP ============
+// 触摸调试模式开关: 注释掉恢复正常界面, 取消注释只画触摸点坐标 (排查 FT6336 映射)
+// #define TOUCH_DEBUG
+
 void loop() {
     // 1. 读 UART, 更新 netLink.state
     netLink.update();
@@ -107,6 +147,7 @@ void loop() {
     // 2. 触摸处理 (切页 / 配置页调参)
     handleTouch();
 
+#ifndef TOUCH_DEBUG
     // 3. 按当前页绘制
     switch (currentPage) {
         case 0:
@@ -125,6 +166,7 @@ void loop() {
 #endif
             break;
     }
+#endif
 #endif
 
     // 4. 报警音同步
@@ -145,42 +187,73 @@ void loop() {
 }
 
 // ============ 触摸处理 ============
+// 切页后调用, 强制新页面重绘 + 配置页触发主控查询
+void markCurrentDirty() {
+#ifdef ENABLE_RADAR_VIEW
+    if (currentPage == 0) radarView.markDirty();
+#endif
+#ifdef ENABLE_STATUS_VIEW
+    if (currentPage == 1) statusView.markDirty();
+#endif
+#ifdef ENABLE_CONFIG_VIEW
+    if (currentPage == 2) configView.onEnter(netLink.state);
+#endif
+}
+
+// 翻页按钮命中检测 (⚠ NAV_BTN_W/H 定义在 lgfx_config.hpp, 与各 view 一致)
+bool hitNavPrev(int x, int y) { return x < NAV_BTN_W && y < NAV_BTN_H; }
+bool hitNavNext(int x, int y) { return x >= lcd.width() - NAV_BTN_W && y < NAV_BTN_H; }
+
 void handleTouch() {
-    lcd.getTouch(nullptr);   // 触发触摸扫描 (LovyanGFX 内部)
+    // 触摸扫描节流: 每 50ms 读一次 (足够灵敏, 又减少 I2C 占用避免与显示 SPI 竞争)
+    static unsigned long lastScan = 0;
+    unsigned long now = millis();
+    if (now - lastScan < 50) return;
+    lastScan = now;
 
-    lgfx::touch_point_t tp;
-    if (!lcd.getTouch(&tp)) {
-        // 无触摸: 检测滑动结束 (简单实现: 不做滑动手势, 改用屏幕顶部/底部点击区切页)
-        lastTouchX = -1;
-        return;
+    int tx, ty;
+    bool touched = readTouch(&tx, &ty);
+
+#ifdef TOUCH_DEBUG
+    if (touched) {
+        lcd.startWrite();
+        lcd.fillCircle(tx, ty, 5, lgfx::color888(255, 255, 255));
+        lcd.setTextColor(lgfx::color888(63, 185, 80), lgfx::color888(0, 0, 0));
+        lcd.setTextSize(1);
+        lcd.setCursor(4, 20);
+        lcd.printf("scr:%d,%d", tx, ty);
+        lcd.endWrite();
+        Serial.printf("[TOUCH] scr=%d,%d\n", tx, ty);
     }
+    return;
+#endif
 
-    // 防抖: 同一区域 300ms 内只响应一次
-    if (millis() - lastTouchMs < 300) return;
+    // 边沿触发: 只在 "无触摸→有触摸" 的瞬间响应一次, 手指按住期间不重复触发
+    // (FT6336 持续报点, 用旧的时间防抖会吞掉稳定后的有效点击)
+    static bool wasPressed = false;
+    if (!touched) { wasPressed = false; return; }
+    if (wasPressed) return;        // 仍在按下状态, 忽略 (等松开后才能再触发)
+    wasPressed = true;
 
-    // 触摸区域划分:
-    //   - 屏幕顶部 0~30px: 上一页
-    //   - 屏幕底部 h-30~h: 下一页
-    //   - 中间: 交给当前页处理 (config_view 的 <> 按钮区域)
-    int h = lcd.height();
     bool handled = false;
 
-    if (tp.y < 30) {
-        // 上一页
+    // 翻页按钮优先 (左上 ‹ / 右上 ›), 在所有页面都生效
+    if (hitNavPrev(tx, ty)) {
         currentPage = (currentPage - 1 + totalPages) % totalPages;
         handled = true;
-        Serial.printf("[TOUCH] 上一页 → %d\n", currentPage);
-    } else if (tp.y > h - 30) {
-        // 下一页
+        Serial.printf("[TOUCH] page -> %d\n", currentPage);
+        markCurrentDirty();
+    } else if (hitNavNext(tx, ty)) {
         currentPage = (currentPage + 1) % totalPages;
         handled = true;
-        Serial.printf("[TOUCH] 下一页 → %d\n", currentPage);
+        Serial.printf("[TOUCH] page -> %d\n", currentPage);
+        markCurrentDirty();
     }
 #ifdef ENABLE_CONFIG_VIEW
     else if (currentPage == 2) {
-        handled = configView.handleTouch(tp.x, tp.y);
+        handled = configView.handleTouch(tx, ty);
     }
 #endif
 
-    if (handled) lastTouchMs = millis();
+    (void)handled;
 }

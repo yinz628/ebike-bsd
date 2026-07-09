@@ -20,10 +20,9 @@
 
 // 触摸引脚 (I2C, 与 ES8311/QMI8658/GXHTC3 共用总线)
 // ⚠ 官方 IDF 例程确认: 实战派 C3 的板载 I2C 总线是 GPIO0(SDA)/GPIO1(SCL)
-//   之前误配 8/9 (那是 ESP32-H2 的分支), 导致触摸和 ES8311 都通信失败
 #define TOUCH_SDA 0
 #define TOUCH_SCL 1
-#define TOUCH_INT -1
+#define TOUCH_ADDR 0x38   // FT6336 I2C 地址
 
 // 自定义屏幕配置类
 class LGFX : public lgfx::LGFX_Device {
@@ -31,7 +30,6 @@ class LGFX : public lgfx::LGFX_Device {
     lgfx::Bus_SPI       _bus;
     // 注: 背光 GPIO2 不用 Light_PWM (实战派 C3 背光低电平点亮, PWM 极性反向)
     //     改为在 c3_terminal.ino setup 里 digitalWrite(2, LOW) 手动点亮
-    lgfx::Touch_FT5x06  _touch;   // FT6336 兼容 FT5x06 驱动
 
 public:
     LGFX() {
@@ -72,19 +70,34 @@ public:
             _panel.config(cfg);
         }
         // 注: 背光控制已移除 Light_PWM, 改用 digitalWrite(2, LOW) 手动点亮
-        {   // 触摸 FT6336 (通过 _cfg 配置 I2C 引脚, 再 setTouch)
-            auto cfg = _touch.config();
-            cfg.i2c_addr = 0x38;
-            cfg.x_min = 0;
-            cfg.x_max = 319;
-            cfg.y_min = 0;
-            cfg.y_max = 239;
-            cfg.pin_sda = TOUCH_SDA;
-            cfg.pin_scl = TOUCH_SCL;
-            cfg.freq = 400000;
-            _touch.config(cfg);
-            _panel.setTouch(&_touch);
-        }
+        // 注: 触摸 FT6336 不用 LovyanGFX 内置 FT5x06 驱动 (其横屏旋转坐标有偏移),
+        //     改用 c3_terminal.ino 里裸 I2C 读取 + 手动旋转变换 (与 v2.7-c3-display 一致)
         setPanel(&_panel);
     }
 };
+
+// ============================================================
+//  共用 UI 组件
+// ============================================================
+
+// 翻页按钮尺寸 (⚠ 须与 c3_terminal.ino 的 hitNavPrev/hitNavNext 一致)
+#define NAV_BTN_W 30
+#define NAV_BTN_H 24
+
+// 绘制翻页按钮: isNext=false 画左上 <, true 画右上 >
+// 模板兼容 LGFX 和 LGFX_Sprite (两者都有 width/fillRoundRect/setTextSize)
+template <typename T>
+inline void drawNavBtn(T &g, bool isNext) {
+    int w = g.width();
+    int x = isNext ? (w - NAV_BTN_W) : 0;
+    int y = 0;
+    uint32_t bg  = lgfx::color888(33, 38, 53);
+    uint32_t fg  = lgfx::color888(88, 166, 255);
+    g.fillRoundRect(x, y, NAV_BTN_W, NAV_BTN_H, 4, bg);
+    g.drawRoundRect(x, y, NAV_BTN_W, NAV_BTN_H, 4, fg);
+    g.setTextColor(fg, bg);
+    g.setTextSize(2);
+    const char *arrow = isNext ? ">" : "<";
+    g.setCursor(x + (NAV_BTN_W - 12) / 2, y + 4);
+    g.print(arrow);
+}

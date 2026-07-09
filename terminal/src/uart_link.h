@@ -42,11 +42,21 @@ struct TerminalState {
     uint32_t last_frame_ms;
     bool     online;
 
+    // 主控回传的配置 (由 $CFG 帧填充, config_view 读取)
+    // 顺序与主控 terminal_link.h GETCFG 响应一致:
+    //   rcw_low, rcw_speed, rcw_range, rcw_hold, rcw_lflash, rcw_flash,
+    //   turn_speed, turn_range, beep_cool, det_range, sensitivity, wifi_on
+    int cfg[12];
+    bool cfg_valid;       // 是否已收到过主控配置
+    bool wifi_on;         // WiFi 开关状态 (cfg[11] 的镜像, 便于 config_view 直接读)
+
     TerminalState() { reset(); }
     void reset() {
         obj_num = 0; bz_mode = 0; ind_l = 0; ind_r = 0; turn = 0;
         rcw_l = rcw_r = false; valid = false; rx_bytes = 0; det_range = 25;
         memset(objs, 0, sizeof(objs));
+        memset(cfg, 0, sizeof(cfg));
+        cfg_valid = false; wifi_on = false;
         last_frame_ms = 0; online = false;
     }
 };
@@ -155,6 +165,10 @@ public:
                         _last_rx = millis();
                     }
                 }
+                else if (_rx_buf.startsWith("$CFG,")) {
+                    // 主控回传配置: $CFG,v0,v1,...,v11 (12 个值, 最后一个是 wifi_on)
+                    parseCfg(_rx_buf.substring(5));
+                }
                 _rx_buf = "";
             } else if (c != '\r') {
                 _rx_buf += c;
@@ -185,6 +199,43 @@ public:
     void sendSave()  { if (_serial) _serial->print("$C,SAVE\n");  }
     void sendReset() { if (_serial) _serial->print("$C,RESET\n"); }
     bool sendFactoryReset() { sendReset(); return true; }
+
+    // 查询主控当前配置: 发 $C,GETCFG → 主控回 $CFG,12个值
+    void requestConfig() {
+        if (_serial) {
+            _serial->print("$C,GETCFG\n");
+            Serial.println("[UART] TX $C,GETCFG");
+        }
+    }
+
+    // WiFi 开关: 发 $C,wifi_on=1/0
+    void sendWifi(bool on) {
+        if (_serial) {
+            String f = "$C,wifi_on=" + String(on ? 1 : 0) + "\n";
+            _serial->print(f);
+            Serial.printf("[UART] TX %s", f.c_str());
+        }
+    }
+
+private:
+    // 解析 $CFG,v0,...,v11 → state.cfg[] + state.wifi_on
+    void parseCfg(const String &body) {
+        int idx = 0, start = 0;
+        int vals[12]; int n = 0;
+        while (start < (int)body.length() && n < 12) {
+            int comma = body.indexOf(',', start);
+            String s = (comma < 0) ? body.substring(start) : body.substring(start, comma);
+            vals[n++] = s.toInt();
+            if (comma < 0) break;
+            start = comma + 1;
+        }
+        if (n >= 9) {
+            for (int i = 0; i < n && i < 12; i++) state.cfg[i] = vals[i];
+            state.wifi_on = (n >= 12) ? (vals[11] != 0) : false;
+            state.cfg_valid = true;
+            Serial.printf("[UART] got $CFG (%d vals, wifi=%d)\n", n, state.wifi_on);
+        }
+    }
 };
 
 extern UartLink netLink;   // 沿用 netLink 名, c3_terminal.ino 无需改引用

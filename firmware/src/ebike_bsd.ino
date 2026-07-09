@@ -94,6 +94,9 @@ int ind_right_mode = IND_MODE_OFF;   // 右指示灯当前模式
 
 int buzzer_mode = 0;              // 0=静音, 1=短鸣(BSD), 2=4Hz(RCW), 3=长鸣(转向辅助)
 
+// WiFi AP 运行状态 (全局, 供 terminal_link.h 的 $WIFI 命令读写)
+bool g_wifi_running = true;
+
 // RCW 状态 (参数见config.rcw)
 bool rcw_l_active = false;
 bool rcw_r_active = false;
@@ -178,11 +181,10 @@ void loop() {
     //   - 无设备连接 → 30s 后关 WiFi
     //   - 有设备连接 → 保持 WiFi 开
     //   - 设备断开 → 重新 30s 倒计时 → 关 WiFi
-    static bool wifi_running = true;
     static unsigned long wifi_check = 0;
     static unsigned long wifi_idle_since = 0;   // 0=有连接或未开始计时
 
-    if (wifi_running && millis() - wifi_check > 2000) {
+    if (g_wifi_running && millis() - wifi_check > 2000) {
         wifi_check = millis();
 
         int sta_num = WiFi.softAPgetStationNum();
@@ -209,7 +211,7 @@ void loop() {
                 WiFi.softAPdisconnect(true);
                 WiFi.enableAP(false);
                 WiFi.mode(WIFI_OFF);
-                wifi_running = false;
+                g_wifi_running = false;
             }
         }
     }

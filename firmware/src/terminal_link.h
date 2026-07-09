@@ -9,6 +9,8 @@
 #define TERMINAL_LINK_H
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
 #include "bsd_protocol.h"
 #include "ms60_radar.h"
 #include "config_store.h"
@@ -20,6 +22,8 @@ extern TurnState_t turn_state;
 extern int buzzer_mode;
 extern bool rcw_l_active, rcw_r_active;
 extern int ind_left_mode, ind_right_mode;
+extern bool g_wifi_running;   // WiFi AP 开关状态
+extern AsyncWebServer server;
 
 // ============ 引脚 ============
 // UART1: GPIO18(TX)/GPIO19(RX) — 已由 v2.7-c3-display 实测验证可稳定传输
@@ -65,6 +69,27 @@ private:
             return;
         }
 
+        // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,11个值\n (整包回传)
+        if (cmd == "GETCFG") {
+            char buf[200];
+            snprintf(buf, sizeof(buf), "$CFG,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                config.rcw.low_speed,
+                config.rcw.speed_threshold,
+                config.rcw.range_limit,
+                config.rcw.hold_time,
+                config.rcw.lflash_interval,
+                config.rcw.flash_interval,
+                config.turn.speed_threshold,
+                config.turn.range_limit,
+                config.sys.bsd_beep_cooldown,
+                config.radar.det_range,
+                config.radar.sensitivity,
+                g_wifi_running ? 1 : 0);
+            _serial->print(buf);
+            Serial.println("[TERM] config sent to C3");
+            return;
+        }
+
         // key=value 形式
         int eq = cmd.indexOf('=');
         if (eq < 0) return;
@@ -72,12 +97,34 @@ private:
         String valStr = cmd.substring(eq + 1);
         int val = valStr.toInt();
 
+        // WiFi 开关: $C,wifi_on=1/0
+        if (key == "wifi_on") {
+            if (val) {
+                Serial.println("[TERM] WiFi ON (by C3)");
+                WiFi.mode(WIFI_AP);
+                WiFi.softAP(config.sys.wifi_ssid, config.sys.wifi_pass);
+                delay(100);
+                server.end(); delay(50); server.begin();
+                g_wifi_running = true;
+            } else {
+                Serial.println("[TERM] WiFi OFF (by C3)");
+                server.end(); delay(50);
+                WiFi.softAPdisconnect(true);
+                WiFi.enableAP(false);
+                WiFi.mode(WIFI_OFF);
+                g_wifi_running = false;
+            }
+            return;
+        }
+
         // 映射到 config 字段 (键名与 wifi_web.h JSON 保持一致)
         bool changed = false;
         if      (key == "rcw_speed")      { config.rcw.speed_threshold = val; changed = true; }
         else if (key == "rcw_low")        { config.rcw.low_speed       = val; changed = true; }
         else if (key == "rcw_range")      { config.rcw.range_limit     = val; changed = true; }
         else if (key == "rcw_hold")       { config.rcw.hold_time       = val; changed = true; }
+        else if (key == "rcw_lflash")     { config.rcw.lflash_interval = val; changed = true; }
+        else if (key == "rcw_flash")      { config.rcw.flash_interval  = val; changed = true; }
         else if (key == "rcw_lmin")       { config.rcw.left_angle_min  = val; changed = true; }
         else if (key == "rcw_lmax")       { config.rcw.left_angle_max  = val; changed = true; }
         else if (key == "rcw_rmin")       { config.rcw.right_angle_min = val; changed = true; }
