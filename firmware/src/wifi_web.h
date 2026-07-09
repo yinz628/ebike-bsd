@@ -129,6 +129,7 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:16px 0}
  <div class="row"><label>低警告速度</label><input id="r_low" type="number" step="0.5"><span class="unit">m/s</span></div>
  <div class="row"><label>高警告速度</label><input id="r_spd" type="number" step="0.5"><span class="unit">m/s</span></div>
  <div class="row"><label>距离上限</label><input id="r_rng" type="number" step="5"><span class="unit">m</span></div>
+ <div class="row"><label>横向距离</label><input id="r_lat" type="number" step="1" min="1" max="10"><span class="unit">m (过滤远处车误报)</span></div>
  <div class="row"><label>保持时间</label><input id="r_hold" type="number" step="100"><span class="unit">ms</span></div>
  <div class="row"><label>低LED闪烁</label><input id="r_lflash" type="number" step="50"><span class="unit">ms</span></div>
  <div class="row"><label>高LED闪烁</label><input id="r_flash" type="number" step="25"><span class="unit">ms</span></div>
@@ -140,6 +141,7 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:16px 0}
  <div class="row"><label>右角度</label><input id="t_rmin" type="number"> ~ <input id="t_rmax" type="number"><span class="unit">°</span></div>
  <div class="row"><label>速度阈值</label><input id="t_spd" type="number" step="0.5"><span class="unit">m/s</span></div>
  <div class="row"><label>距离上限</label><input id="t_rng" type="number" step="5"><span class="unit">m</span></div>
+ <div class="row"><label>横向距离</label><input id="t_lat" type="number" step="1" min="1" max="10"><span class="unit">m (过滤远处车误报)</span></div>
 </div>
 
 <div class="card"><h2>⚙️ 系统</h2>
@@ -166,12 +168,12 @@ async function loadCfg(){
   q('#r_lmin').value=rw.left_min||-40;q('#r_lmax').value=rw.left_max||-5;
   q('#r_rmin').value=rw.right_min||5;q('#r_rmax').value=rw.right_max||40;
   q('#r_low').value=rw.low_speed||2;
-  q('#r_spd').value=rw.speed;q('#r_rng').value=rw.range;q('#r_hold').value=rw.hold;q('#r_lflash').value=rw.lflash||500;
+  q('#r_spd').value=rw.speed;q('#r_rng').value=rw.range;q('#r_lat').value=rw.lateral||3;q('#r_hold').value=rw.hold;q('#r_lflash').value=rw.lflash||500;
   q('#r_flash').value=rw.flash||125;
   q('#r_cool').value=s.bsd_beep_cooldown||5000;
   q('#t_lmin').value=t.left_min||-40;q('#t_lmax').value=t.left_max||-5;
   q('#t_rmin').value=t.right_min||5;q('#t_rmax').value=t.right_max||40;
-  q('#t_spd').value=t.speed;q('#t_rng').value=t.range;
+  q('#t_spd').value=t.speed;q('#t_rng').value=t.range;q('#t_lat').value=t.lateral||3;
   q('#s_cool').value=s.bsd_beep_cooldown||5000;
   var rd=j.radar||{};
   q('#rd_rng').value=rd.det_range||30;
@@ -182,8 +184,8 @@ async function loadCfg(){
 
 async function save(){
  var cfg={
-  rcw:{left_min:+q('#r_lmin').value,left_max:+q('#r_lmax').value,right_min:+q('#r_rmin').value,right_max:+q('#r_rmax').value,low_speed:+q('#r_low').value,speed:+q('#r_spd').value,range:+q('#r_rng').value,hold:+q('#r_hold').value,lflash:+q('#r_lflash').value,flash:+q('#r_flash').value},
-  turn:{left_min:+q('#t_lmin').value,left_max:+q('#t_lmax').value,right_min:+q('#t_rmin').value,right_max:+q('#t_rmax').value,speed:+q('#t_spd').value,range:+q('#t_rng').value},
+  rcw:{left_min:+q('#r_lmin').value,left_max:+q('#r_lmax').value,right_min:+q('#r_rmin').value,right_max:+q('#r_rmax').value,low_speed:+q('#r_low').value,speed:+q('#r_spd').value,range:+q('#r_rng').value,lateral:+q('#r_lat').value,hold:+q('#r_hold').value,lflash:+q('#r_lflash').value,flash:+q('#r_flash').value},
+  turn:{left_min:+q('#t_lmin').value,left_max:+q('#t_lmax').value,right_min:+q('#t_rmin').value,right_max:+q('#t_rmax').value,speed:+q('#t_spd').value,range:+q('#t_rng').value,lateral:+q('#t_lat').value},
   sys:{bsd_beep_cooldown:+q('#r_cool').value},
   radar:{det_range:+q('#rd_rng').value,sensitivity:+q('#rd_sens').value}
  };

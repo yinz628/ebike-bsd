@@ -10,7 +10,8 @@
 |---|---|
 | 雷达扇形图 | 40m 量程，目标红点 + 速度标注，4 条距离弧线，±40° FOV |
 | 状态页 | 主控连接状态 / 运行时间 / 雷达字节 / 转向 / 蜂鸣 / 目标列表 |
-| 配置页 | 3 个 tab（RCW 6参 / TURN 2参 / SYS 3参 + WiFi 开关），触摸调参 + SAVE |
+| 配置页 | 4 个 tab（SYS / RCW1 / RCW2 / TURN），13 参数 + WiFi 开关，触摸调参 + SAVE 持久化 |
+| 横向距离过滤 | RCW + TURN 都支持 LAT 参数，过滤探测范围内横向远处车辆误报 |
 | REFRESH | 查询主控当前配置，同步到 C3 |
 | WiFi 控制 | C3 触摸面板开关主控 WiFi AP（手动控制不自动关） |
 | 报警音 | ES8311 + NS4150B 功放，2kHz 方波，4 种蜂鸣模式 |
@@ -54,14 +55,15 @@ $S,obj_num,bz,rcw_l,rcw_r,ind_l,ind_r,turn,rx_bytes,valid[,t_range,t_angle,t_vel
 ### 主控 → C3：`$CFG` 配置回传（C3 请求时）
 
 ```
-$CFG,rcw_low,rcw_speed,rcw_range,rcw_hold,rcw_lflash,rcw_flash,turn_speed,turn_range,beep_cool,det_range,sensitivity,wifi_on\n
+$CFG,rcw_low,rcw_speed,rcw_range,rcw_lateral,rcw_hold,rcw_lflash,rcw_flash,turn_speed,turn_range,turn_lateral,beep_cool,det_range,sensitivity,wifi_on\n
 ```
+（14 个值，含 RCW/TURN 横向距离 + WiFi 状态）
 
 ### C3 → 主控：`$C` 配置命令
 
 ```
-$C,key=value\n     # 设置参数（主控收到后自动 saveToNVS + setBSDMode）
-$C,SAVE\n          # 保存配置（已废弃，SAVE 按钮改为逐个发 key=value）
+$C,key=value\n     # 设置参数（仅改内存，不持久化）
+$C,SAVE\n          # 持久化所有参数到 NVS + 下发雷达配置（SAVE 按钮发完 key=value 后调）
 $C,GETCFG\n        # 查询主控当前配置（主控回 $CFG 帧）
 $C,wifi_on=1/0\n   # WiFi AP 开关
 ```
@@ -70,10 +72,36 @@ $C,wifi_on=1/0\n   # WiFi AP 开关
 
 | tab | key | 含义 |
 |---|---|---|
-| RCW | rcw_low, rcw_speed, rcw_range, rcw_hold, rcw_lflash, rcw_flash | 后方碰撞预警参数 |
-| TURN | turn_speed, turn_range | 转向辅助参数 |
-| SYS | sensitivity, det_range, beep_cool | 雷达灵敏度/探测距离/蜂鸣冷却 |
+| RCW1 | rcw_low, rcw_speed, rcw_range, rcw_lateral | 低/高警告速度/距离上限/横向距离 |
+| RCW2 | rcw_hold, rcw_lflash, rcw_flash | 保持时间/低高 LED 闪烁间隔 |
+| TURN | turn_speed, turn_range, turn_lateral | 转向速度/距离/横向距离 |
+| SYS | beep_cool, det_range, sensitivity | 蜂鸣冷却/探测距离/灵敏度 |
 | SYS | wifi_on | WiFi AP 开关 |
+
+### 配置页 tab 布局
+
+```
+SYS (首页)    BEEP_CD / D_RNG / SENS + WiFi 开关
+RCW1          LOW_V / HI_V / RANGE / LAT
+RCW2          HOLD / L_FLSH / H_FLSH
+TURN          T_SPD / T_RNG / T_LAT
+```
+
+### 横向距离过滤
+
+避免"探测范围内横向很远的汽车被误报"：计算 `lateral = range × sin(|angle|)`，超过 `lateral_limit`（默认 3m）的目标跳过。
+
+例：一辆在 -40° 方向、距离 20m 的车，横向距离 = 20×sin(40°) ≈ 12.8m > 3m → 不报警。
+
+RCW 和 TURN 都支持，参数分别 `rcw_lateral` / `turn_lateral`，可在 C3 配置页或 Web 界面调整。
+
+### 持久化
+
+| 通道 | 持久化方式 |
+|---|---|
+| C3 终端 SAVE | 发 13 个 key=value → 发 $C,SAVE → 主控 saveToNVS |
+| Web /api/config POST | fromJson → saveToNVS → setBSDMode |
+| 串口 SAVE 命令 | saveToNVS → setBSDMode |
 
 ## 触摸校准（FT6336）
 

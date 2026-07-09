@@ -70,18 +70,20 @@ private:
             return;
         }
 
-        // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,11个值\n (整包回传)
+        // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,14个值\n (整包回传)
         if (cmd == "GETCFG") {
             char buf[200];
-            snprintf(buf, sizeof(buf), "$CFG,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            snprintf(buf, sizeof(buf), "$CFG,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
                 config.rcw.low_speed,
                 config.rcw.speed_threshold,
                 config.rcw.range_limit,
+                config.rcw.lateral_limit,
                 config.rcw.hold_time,
                 config.rcw.lflash_interval,
                 config.rcw.flash_interval,
                 config.turn.speed_threshold,
                 config.turn.range_limit,
+                config.turn.lateral_limit,
                 config.sys.bsd_beep_cooldown,
                 config.radar.det_range,
                 config.radar.sensitivity,
@@ -124,6 +126,7 @@ private:
         if      (key == "rcw_speed")      { config.rcw.speed_threshold = val; changed = true; }
         else if (key == "rcw_low")        { config.rcw.low_speed       = val; changed = true; }
         else if (key == "rcw_range")      { config.rcw.range_limit     = val; changed = true; }
+        else if (key == "rcw_lateral")    { config.rcw.lateral_limit   = val; changed = true; }
         else if (key == "rcw_hold")       { config.rcw.hold_time       = val; changed = true; }
         else if (key == "rcw_lflash")     { config.rcw.lflash_interval = val; changed = true; }
         else if (key == "rcw_flash")      { config.rcw.flash_interval  = val; changed = true; }
@@ -133,6 +136,7 @@ private:
         else if (key == "rcw_rmax")       { config.rcw.right_angle_max = val; changed = true; }
         else if (key == "turn_speed")     { config.turn.speed_threshold= val; changed = true; }
         else if (key == "turn_range")     { config.turn.range_limit    = val; changed = true; }
+        else if (key == "turn_lateral")   { config.turn.lateral_limit  = val; changed = true; }
         else if (key == "sensitivity")    { config.radar.sensitivity   = val; changed = true; }
         else if (key == "det_range")      { config.radar.det_range     = val; changed = true; }
         else if (key == "beep_cool")      { config.sys.bsd_beep_cooldown = val; changed = true; }

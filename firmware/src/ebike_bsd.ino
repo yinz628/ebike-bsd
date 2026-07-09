@@ -414,6 +414,11 @@ void updateTurnAssist() {
         if (obj->range <= 0 || obj->range >= config.turn.range_limit) continue;
         if (obj->velocity < config.turn.speed_threshold) continue;
 
+        // 横向距离过滤 (同 RCW): lateral = range × sin(|angle|)
+        float latRad = abs(obj->angle) * PI / 180.0f;
+        int lateral = (int)(obj->range * sinf(latRad));
+        if (lateral > config.turn.lateral_limit) continue;
+
         if (turn_state == TURN_LEFT) {
             // 左转: 角度在左后方 -40°~-5° 且有接近速度
             if (TURN_ANGLE_IS_LEFT(obj->angle)) {
@@ -481,7 +486,14 @@ void updateRCW() {
         for (int i = 0; i < f->obj_num && i < 8; i++) {
             BSDObj *obj = &f->objects[i];
             if (obj->range <= 0 || obj->range > config.rcw.range_limit) continue;
-            
+
+            // 横向距离过滤: lateral = range × sin(|angle|)
+            // 横向距离远的车辆 (如 ±40° 边缘的远处车) 不会构成后方碰撞, 跳过
+            // 避免"探测范围内横向很远的汽车被误报"
+            float latRad = abs(obj->angle) * PI / 180.0f;
+            int lateral = (int)(obj->range * sinf(latRad));
+            if (lateral > config.rcw.lateral_limit) continue;
+
             // 速度分级
             bool isHigh = (obj->velocity >= config.rcw.speed_threshold);
             bool isLow  = (obj->velocity >= config.rcw.low_speed && !isHigh);

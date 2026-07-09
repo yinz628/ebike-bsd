@@ -25,32 +25,36 @@ private:
         int  cfgIdx;   // 对应 state.cfg[] 的索引 (GETCFG 响应顺序), -1=无
     };
 
-    // params 顺序与主控 GETCFG 响应 ($CFG,v0..v11) 对齐:
-    //   0:rcw_low 1:rcw_speed 2:rcw_range 3:rcw_hold 4:rcw_lflash 5:rcw_flash
-    //   6:turn_speed 7:turn_range 8:beep_cool 9:det_range 10:sensitivity 11:wifi_on
-    static const int NPARAM = 11;
+    // params 顺序与主控 GETCFG 响应 ($CFG,v0..v13) 对齐 (14 个值):
+    //   0:rcw_low 1:rcw_speed 2:rcw_range 3:rcw_lateral 4:rcw_hold 5:rcw_lflash 6:rcw_flash
+    //   7:turn_speed 8:turn_range 9:turn_lateral 10:beep_cool 11:det_range 12:sensitivity 13:wifi_on
+    static const int NPARAM = 13;
     Param params[NPARAM] = {
         // RCW
-        {"rcw_low",    "LOW_V",  2,    1,   0, 5,      "m/s", 0},
-        {"rcw_speed",  "HI_V",   3,    1,   1, 10,     "m/s", 1},
-        {"rcw_range",  "RANGE",  25,   5,   5, 50,     "m",   2},
-        {"rcw_hold",   "HOLD",   3000, 500, 500,10000, "ms",  3},
-        {"rcw_lflash", "L_FLSH", 500,  100, 100,2000,  "ms",  4},
-        {"rcw_flash",  "H_FLSH", 125,  25,  50, 500,   "ms",  5},
+        {"rcw_low",     "LOW_V",  2,    1,   0, 5,      "m/s", 0},
+        {"rcw_speed",   "HI_V",   3,    1,   1, 10,     "m/s", 1},
+        {"rcw_range",   "RANGE",  25,   5,   5, 50,     "m",   2},
+        {"rcw_lateral", "LAT",    3,    1,   1, 10,     "m",   3},
+        {"rcw_hold",    "HOLD",   3000, 500, 500,10000, "ms",  4},
+        {"rcw_lflash",  "L_FLSH", 500,  100, 100,2000,  "ms",  5},
+        {"rcw_flash",   "H_FLSH", 125,  25,  50, 500,   "ms",  6},
         // TURN
-        {"turn_speed", "T_SPD",  2,    1,   0, 10,     "m/s", 6},
-        {"turn_range", "T_RNG",  30,   5,   5, 50,     "m",   7},
+        {"turn_speed",  "T_SPD",  2,    1,   0, 10,     "m/s", 7},
+        {"turn_range",  "T_RNG",  30,   5,   5, 50,     "m",   8},
+        {"turn_lateral","T_LAT",  3,    1,   1, 10,     "m",   9},
         // SYS
-        {"beep_cool",  "BEEP_CD",5000, 500, 1000,10000,"ms",  8},
-        {"det_range",  "D_RNG",  30,   5,   5, 50,     "m",   9},
-        {"sensitivity","SENS",   2,    1,   0, 10,     "",    10},
+        {"beep_cool",   "BEEP_CD",5000, 500, 1000,10000,"ms",  10},
+        {"det_range",   "D_RNG",  30,   5,   5, 50,     "m",   11},
+        {"sensitivity", "SENS",   2,    1,   0, 10,     "",    12},
     };
 
-    // tab 分组: 0=RCW, 1=TURN, 2=SYS
-    static const int NTAB = 3;
-    const int tabStart[NTAB] = {0, 6, 8};
-    const int tabCount[NTAB] = {6, 2, 3};
-    const char *tabName[NTAB] = {"RCW", "TURN", "SYS"};
+    // tab 分组: 0=SYS, 1=RCW1, 2=RCW2, 3=TURN (SYS 放首页, 进配置页先看系统状态)
+    // params 数组顺序不变, tabStart/tabCount 按显示顺序重映射
+    static const int NTAB = 4;
+    // SYS(10,11,12) RCW1(0,1,2,3) RCW2(4,5,6) TURN(7,8,9)
+    const int tabStart[NTAB] = {10, 0, 4, 7};
+    const int tabCount[NTAB] = {3, 4, 3, 3};
+    const char *tabName[NTAB] = {"SYS", "RCW1", "RCW2", "TURN"};
 
     int tab = 0;
     int selected = 0;
@@ -59,7 +63,7 @@ private:
     unsigned long refreshMsg = 0;   // REFRESH 反馈显示时间 (0=不显示)
     uint8_t _lastCfgSeq = 0;        // 上次同步的 cfg_seq (变化时才同步, 避免覆盖本地修改)
 
-    // 布局: 行高 26px, 起始 y=36 (RCW 6 行到 y=166+24=190, 底部按钮 y=214 留 24px 间隔)
+    // 布局: 行高 26px, 起始 y=36 (每页最多 4 行, 到 y=134, 底部按钮 y=214 充裕)
     int rowY(int i) { return 36 + i * 26; }
     int paramIdx(int rowInTab) { return tabStart[tab] + rowInTab; }
 
@@ -79,7 +83,7 @@ public:
     // 切到本页 / 切 tab 时调用: 同步主控配置 + 进入 SYS 时查询 WiFi
     void onEnter(const TerminalState &st) {
         syncFromMaster(st);
-        if (tab == 2) netLink.requestConfig();   // SYS tab 需要最新 WiFi 状态
+        if (tab == 0) netLink.requestConfig();   // SYS tab (首页) 需要最新 WiFi 状态
         _needsDraw = true;
     }
 
@@ -140,9 +144,9 @@ public:
             lcd.print(p.unit);
         }
 
-        // SYS tab: WiFi 开关行 (在参数行之后)
-        if (tab == 2) {
-            int wy = rowY(tabCount[2]);   // 第 4 行位置 (y=132)
+        // SYS tab (首页): WiFi 开关行 (在参数行之后)
+        if (tab == 0) {
+            int wy = rowY(tabCount[0]);   // 参数行之后的位置
             // 标签
             lcd.setTextColor(lgfx::color888(201, 209, 217));
             lcd.setTextSize(1);
@@ -206,12 +210,14 @@ public:
         // SAVE (x=0~95)
         if (ty >= 205 && tx <= 95) {
             if (dirty) {
+                // 逐个发送参数, 最后发 SAVE 触发主控持久化到 NVS
                 for (int i = 0; i < NPARAM; i++) {
                     netLink.sendConfig("", params[i].key, params[i].value);
                     delay(20);
                 }
+                netLink.sendSave();   // 触发 config.saveToNVS() + radar.setBSDMode()
                 dirty = false; _needsDraw = true;
-                Serial.println("[CFG] sent all params to master");
+                Serial.println("[CFG] sent all params + SAVE to master");
             }
             return true;
         }
@@ -231,9 +237,9 @@ public:
             if (hitPlus(tx, ty, y))  { adjustParam(paramIdx(i), +1); selected = i; _needsDraw = true; return true; }
         }
 
-        // SYS tab: WiFi 开关
-        if (tab == 2) {
-            int wy = rowY(tabCount[2]);
+        // SYS tab (首页): WiFi 开关
+        if (tab == 0) {
+            int wy = rowY(tabCount[0]);
             if (tx >= BTN_MINUS_X && tx <= BTN_MINUS_X + 90 && ty >= wy - 2 && ty <= wy - 2 + BTN_H) {
                 bool nw = !netLink.state.wifi_on;
                 netLink.sendWifi(nw);
@@ -258,7 +264,7 @@ public:
             if (tx < lcd.width() / 2) tab = (tab - 1 + NTAB) % NTAB;
             else                       tab = (tab + 1) % NTAB;
             selected = 0;
-            if (tab == 2) netLink.requestConfig();   // 进入 SYS 查询 WiFi
+            if (tab == 0) netLink.requestConfig();   // 进入 SYS (首页) 查询 WiFi
             _needsDraw = true;
             Serial.printf("[CFG] tab -> %s\n", tabName[tab]);
             return true;
@@ -273,7 +279,7 @@ private:
         if (!st.cfg_valid) return;
         for (int i = 0; i < NPARAM; i++) {
             int ci = params[i].cfgIdx;
-            if (ci >= 0 && ci < 12) params[i].value = st.cfg[ci];
+            if (ci >= 0 && ci < 14) params[i].value = st.cfg[ci];
         }
     }
 

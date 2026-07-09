@@ -19,6 +19,7 @@ struct RCWParams {
     int low_speed       = 2;       // m/s, 低警告阈值
     int speed_threshold = 3;       // m/s, 高警告阈值
     int range_limit     = 25;      // m
+    int lateral_limit   = 3;       // m, 横向距离上限 (过滤边缘远处车辆误报)
     int hold_time       = 3000;    // ms
     int flash_interval  = 125;     // ms, 高LED半周期 (4Hz)
     int lflash_interval = 500;     // ms, 低LED半周期 (1Hz)
@@ -31,6 +32,7 @@ struct TurnAssistParams {
     int right_angle_max = 40;
     int speed_threshold = 2;       // m/s
     int range_limit     = 30;      // m
+    int lateral_limit   = 3;       // m, 横向距离上限 (同 RCW, 过滤远处车)
 };
 
 struct SystemParams {
@@ -64,6 +66,7 @@ public:
         r["low_speed"] = rcw.low_speed;
         r["speed"]     = rcw.speed_threshold;
         r["range"]     = rcw.range_limit;
+        r["lateral"]   = rcw.lateral_limit;
         r["hold"]      = rcw.hold_time;
         r["lflash"]    = rcw.lflash_interval;
         r["flash"]     = rcw.flash_interval;
@@ -75,6 +78,7 @@ public:
         t["right_max"] = turn.right_angle_max;
         t["speed"]     = turn.speed_threshold;
         t["range"]     = turn.range_limit;
+        t["lateral"]   = turn.lateral_limit;
 
         JsonObject s = doc["sys"].to<JsonObject>();
         s["wifi_ssid"] = sys.wifi_ssid;
@@ -96,6 +100,7 @@ public:
             rcw.low_speed       = r["low_speed"] | rcw.low_speed;
             rcw.speed_threshold = r["speed"] | rcw.speed_threshold;
             rcw.range_limit     = r["range"] | rcw.range_limit;
+            rcw.lateral_limit   = r["lateral"] | rcw.lateral_limit;
             rcw.hold_time       = r["hold"]  | rcw.hold_time;
             rcw.lflash_interval = r["lflash"] | rcw.lflash_interval;
             rcw.flash_interval  = r["flash"] | rcw.flash_interval;
@@ -108,6 +113,7 @@ public:
             turn.right_angle_max = t["right_max"] | turn.right_angle_max;
             turn.speed_threshold = t["speed"]     | turn.speed_threshold;
             turn.range_limit     = t["range"]     | turn.range_limit;
+            turn.lateral_limit   = t["lateral"]   | turn.lateral_limit;
         }
         JsonObject s = doc["sys"];
         if (s) {
