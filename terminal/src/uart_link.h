@@ -48,6 +48,7 @@ struct TerminalState {
     //   turn_speed, turn_range, beep_cool, det_range, sensitivity, wifi_on
     int cfg[12];
     bool cfg_valid;       // 是否已收到过主控配置
+    uint8_t cfg_seq;      // $CFG 帧接收计数 (每次收到+1, config_view 据此判断是否需同步)
     bool wifi_on;         // WiFi 开关状态 (cfg[11] 的镜像, 便于 config_view 直接读)
 
     TerminalState() { reset(); }
@@ -56,7 +57,7 @@ struct TerminalState {
         rcw_l = rcw_r = false; valid = false; rx_bytes = 0; det_range = 25;
         memset(objs, 0, sizeof(objs));
         memset(cfg, 0, sizeof(cfg));
-        cfg_valid = false; wifi_on = false;
+        cfg_valid = false; cfg_seq = 0; wifi_on = false;
         last_frame_ms = 0; online = false;
     }
 };
@@ -233,6 +234,7 @@ private:
             for (int i = 0; i < n && i < 12; i++) state.cfg[i] = vals[i];
             state.wifi_on = (n >= 12) ? (vals[11] != 0) : false;
             state.cfg_valid = true;
+            state.cfg_seq++;   // 通知 config_view 有新配置到达
             Serial.printf("[UART] got $CFG (%d vals, wifi=%d)\n", n, state.wifi_on);
         }
     }

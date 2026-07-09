@@ -57,6 +57,7 @@ private:
     bool dirty = false;
     bool _needsDraw = true;
     unsigned long refreshMsg = 0;   // REFRESH 反馈显示时间 (0=不显示)
+    uint8_t _lastCfgSeq = 0;        // 上次同步的 cfg_seq (变化时才同步, 避免覆盖本地修改)
 
     // 布局: 行高 26px, 起始 y=36 (RCW 6 行到 y=166+24=190, 底部按钮 y=214 留 24px 间隔)
     int rowY(int i) { return 36 + i * 26; }
@@ -90,8 +91,13 @@ public:
         if (!_needsDraw) return;
         _needsDraw = false;
 
-        // 收到主控配置后同步本地 params (REFRESH 响应)
-        if (st.cfg_valid) syncFromMaster(st);
+        // 收到新的主控配置时同步一次 (仅 REFRESH/onEnter 触发, 不覆盖用户编辑)
+        // cfg_seq 变化 = 主控回了新的 $CFG, 此时才同步
+        if (st.cfg_valid && st.cfg_seq != _lastCfgSeq) {
+            syncFromMaster(st);
+            _lastCfgSeq = st.cfg_seq;
+            dirty = false;   // 同步后清除未保存标记 (值与主控一致)
+        }
 
         lcd.startWrite();
         lcd.fillScreen(lgfx::color888(13, 17, 23));
