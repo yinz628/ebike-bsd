@@ -84,9 +84,10 @@ public:
     }
 
     void draw(const TerminalState &st) {
-        // REFRESH 反馈期间持续重绘 (2 秒倒计时)
-        if (refreshMsg && millis() - refreshMsg < 2000) {
-            _needsDraw = true;
+        // REFRESH 反馈: 2 秒后需要清除文字, 触发一次重绘 (不持续重绘, 避免闪屏)
+        if (refreshMsg && millis() - refreshMsg >= 2000) {
+            refreshMsg = 0;
+            _needsDraw = true;   // 清除 REFRESHED! 文字
         }
         if (!_needsDraw) return;
         _needsDraw = false;
