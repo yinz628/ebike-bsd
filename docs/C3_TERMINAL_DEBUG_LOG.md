@@ -308,3 +308,95 @@ C3 的 GPIO18/19 能正常 loopback + 发送给主控(C3→主控成功),
 
 ### 本文档
 - `docs/C3_TERMINAL_DEBUG_LOG.md` (本文件)
+
+---
+
+## 十、阶段 2: C3 完整 UI 开发 + 主控联调 (2026-07-08 ~ 07-09)
+
+### 10.1 UART 引脚修正 (GPIO18/19)
+
+**问题**: 原 GPIO5(TX)/GPIO2(RX) 不稳定，GPIO2 是 strapping 引脚（启动时影响 Flash 模式）。
+
+**解决**: 改用 GPIO18(TX)/GPIO19(RX)，与 v2.7-c3-display 一致，实测双向通信稳定。
+之前诊断"主控 GPIO 损坏"仅影响 GPIO5/GPIO21/GPIO22，GPIO18/19 正常。
+
+### 10.2 防闪屏 (Sprite 背景 + 脏标志)
+
+**问题**: 每帧 fillScreen 全屏重绘造成闪烁。
+
+**解决**:
+- 雷达图: 静态背景预渲染到 LGFX_Sprite，每帧 pushSprite 一次性覆盖
+- 状态页/配置页: 脏标志（_needsDraw / summaryChanged），仅在数据变化或切页时重绘
+- 所有绘制用 startWrite/endWrite 包裹，避免 SPI 分段撕裂
+- 刷新率 50fps → 15fps（主控 10Hz 推送，无需更快）
+
+### 10.3 触摸校准 (FT6336 裸 I2C)
+
+**问题**: LovyanGFX 内置 FT5x06 驱动横屏坐标偏移，白点位置和手指不对应。
+
+**解决**: 弃用 LovyanGFX 触摸，直接裸读 FT6336 寄存器 + 手动变换（移植自 v2.7-c3-display）:
+```
+屏幕X = raw_y                        (范围 0~317 → 0~319)
+屏幕Y = (212 - raw_x) * 239 / 187    (raw_x 25~212 → 0~239)
+```
+
+实测校准数据: 左上(212,0)→(0,0)，右上(200,317)→(317,15)，左下(25,0)→(0,239)。
+
+### 10.4 触摸防抖 (边沿触发)
+
+**问题**: 时间锁防抖（300ms）导致 SAVE/REFRESH 按不到——手指按下瞬间坐标偏移消耗了响应机会。
+
+**解决**: 改用 wasPressed 边沿触发，只在"无触摸→有触摸"瞬间响应一次。
+
+### 10.5 配置页 (3 tab + REFRESH + WiFi)
+
+**布局**: -/+ 按钮在中间（x=115/161），避开右边缘触摸死区（raw_y>290 不准）。
+- RCW tab: 6 参数（low/speed/range/hold/lflash/flash）
+- TURN tab: 2 参数（speed/range）
+- SYS tab: 3 参数 + WiFi 开关（进入时自动 requestConfig）
+
+**REFRESH**: C3 发 $C,GETCFG → 主控回 $CFG,12 值（含 wifi_on）
+**参数同步**: 只在收到新 $CFG 时同步一次（cfg_seq 计数），不覆盖用户本地编辑
+
+### 10.6 报警音 (ES8311 官方寄存器序列)
+
+**问题**: 手写的 ES8311 寄存器序列完全错误，喇叭只出杂音。
+
+**解决**: 移植乐鑫官方 es8311.c 驱动的初始化序列:
+- 复位: REG00 = 0x1F → 0x00 → 0x80
+- 时钟: 16kHz + MCLK 6.144MHz，coeff_div 查表系数
+- 数据格式: 16bit I2S Slave
+- 关键上电: REG0D/0E/12/13/1C/37
+- 2kHz 方波（16 样本/周期）
+- playBuf 阻塞写入（portMAX_DELAY），开机自检音 500ms
+
+### 10.7 WiFi 控制 (手动模式)
+
+**问题**: C3 点 WiFi ON，主控开了 AP 但 30s 空闲后又自动关了。
+
+**解决**: 加 g_wifi_manual 标志，C3 触摸面板控制 WiFi 后禁止自动关闭。
+
+### 10.8 联调结果
+
+主控 ESP32 (COM4) + C3 (COM3) UART 连接验证:
+- ✅ C3 显示 ONLINE，接收 $S 帧
+- ✅ 参数 SAVE: C3 发 $C,key=value → 主控 applied + saveToNVS
+- ✅ REFRESH: C3 发 $C,GETCFG → 主控回 $CFG → C3 同步参数
+- ✅ WiFi 开关: C3 发 $C,wifi_on=1/0 → 主控开/关 AP（不自动关）
+- ✅ 模拟目标: 雷达无真实目标时主控生成 3 个移动目标（正弦驱动）
+
+### 10.9 本次产出文件
+
+**C3 侧**:
+- `terminal/src/c3_terminal.ino` — 全功能启用 + 触摸调试开关 + 边沿触发
+- `terminal/src/radar_view.h` — Sprite 防闪屏 + 40m 量程 + 脏标志
+- `terminal/src/status_view.h` — 脏标志 + 英文显示
+- `terminal/src/config_view.h` — 3 tab + REFRESH + WiFi 开关 + 本地编辑
+- `terminal/src/alert_sound.h` — 官方 ES8311 序列 + 2kHz + 开机自检
+- `terminal/src/lgfx_config.hpp` — 移除 LovyanGFX 触摸 + drawNavBtn
+- `terminal/src/uart_link.h` — $CFG 解析 + requestConfig + sendWifi
+
+**主控侧**:
+- `firmware/src/terminal_link.h` — GPIO18/19 + GETCFG + wifi_on + 模拟目标
+- `firmware/src/ebike_bsd.ino` — g_wifi_running/g_wifi_manual 全局 + 自动关排除手动
+
