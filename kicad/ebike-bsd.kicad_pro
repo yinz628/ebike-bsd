@@ -1,1 +1,8 @@
-(kicad_project (version 20240108))
+(kicad_project (version 20240108)
+  (title_block
+    (title "e-Bike BSD System V2.7")
+    (date "2026-07-10")
+    (rev "V2.7")
+    (company "DIY")
+  )
+)
