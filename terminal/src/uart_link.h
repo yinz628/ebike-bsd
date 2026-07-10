@@ -43,13 +43,13 @@ struct TerminalState {
     bool     online;
 
     // 主控回传的配置 (由 $CFG 帧填充, config_view 读取)
-    // 顺序与主控 terminal_link.h GETCFG 响应一致 (14 个值):
+    // 顺序与主控 terminal_link.h GETCFG 响应一致 (15 个值):
     //   0:rcw_low 1:rcw_speed 2:rcw_range 3:rcw_lateral 4:rcw_hold 5:rcw_lflash 6:rcw_flash
-    //   7:turn_speed 8:turn_range 9:turn_lateral 10:beep_cool 11:det_range 12:sensitivity 13:wifi_on
-    int cfg[14];
+    //   7:turn_speed 8:turn_range 9:turn_lateral 10:beep_cool 11:rcw_buzzer 12:det_range 13:sensitivity 14:wifi_on
+    int cfg[15];
     bool cfg_valid;       // 是否已收到过主控配置
     uint8_t cfg_seq;      // $CFG 帧接收计数 (每次收到+1, config_view 据此判断是否需同步)
-    bool wifi_on;         // WiFi 开关状态 (cfg[13] 的镜像, 便于 config_view 直接读)
+    bool wifi_on;         // WiFi 开关状态 (cfg[14] 的镜像, 便于 config_view 直接读)
 
     TerminalState() { reset(); }
     void reset() {
@@ -219,11 +219,11 @@ public:
     }
 
 private:
-    // 解析 $CFG,v0,...,v13 → state.cfg[] + state.wifi_on (14 个值)
+    // 解析 $CFG,v0,...,v14 → state.cfg[] + state.wifi_on (15 个值)
     void parseCfg(const String &body) {
         int start = 0;
-        int vals[14]; int n = 0;
-        while (start < (int)body.length() && n < 14) {
+        int vals[15]; int n = 0;
+        while (start < (int)body.length() && n < 15) {
             int comma = body.indexOf(',', start);
             String s = (comma < 0) ? body.substring(start) : body.substring(start, comma);
             vals[n++] = s.toInt();
@@ -231,8 +231,8 @@ private:
             start = comma + 1;
         }
         if (n >= 9) {
-            for (int i = 0; i < n && i < 14; i++) state.cfg[i] = vals[i];
-            state.wifi_on = (n >= 14) ? (vals[13] != 0) : false;
+            for (int i = 0; i < n && i < 15; i++) state.cfg[i] = vals[i];
+            state.wifi_on = (n >= 15) ? (vals[14] != 0) : false;
             state.cfg_valid = true;
             state.cfg_seq++;   // 通知 config_view 有新配置到达
             Serial.printf("[UART] got $CFG (%d vals, wifi=%d)\n", n, state.wifi_on);

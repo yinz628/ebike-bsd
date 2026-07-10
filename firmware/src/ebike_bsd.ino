@@ -93,6 +93,7 @@ int ind_right_mode = IND_MODE_OFF;   // 右指示灯当前模式
 #define RCW_IND_DEFAULT    125   // 4Hz 快闪
 
 int buzzer_mode = 0;              // 0=静音, 1=短鸣(BSD), 2=4Hz(RCW), 3=长鸣(转向辅助)
+unsigned long alarm_test_until = 0;  // ALARM 测试持续到此时间 (0=非测试)
 
 // WiFi AP 运行状态 (全局, 供 terminal_link.h 的 $WIFI 命令读写)
 bool g_wifi_running = true;
@@ -259,6 +260,11 @@ void loop() {
             digitalWrite(BUZZER_PIN, HIGH); delay(200);
             digitalWrite(BUZZER_PIN, LOW);
             Serial.println("[FWD] BEEP test");
+        }
+        else if (line == "ALARM") {
+            // 触发 RCW 蜂鸣 3 秒 (测试主控蜂鸣器 + C3 扬声器同步)
+            alarm_test_until = millis() + 3000;
+            Serial.println("[FWD] ALARM test (RCW 4Hz, 3s)");
         }
         else if (line == "SAVE") {
             config.saveToNVS();
@@ -441,7 +447,7 @@ void updateTurnAssist() {
         } else {
             ind_right_mode = IND_MODE_TURN;
         }
-        buzzer_mode = 3;  // 转向辅助: 持续长鸣
+        buzzer_mode = 3;  // 转向辅助: 持续长鸣 (不受蜂鸣开关控制)
         Serial.println("[ASSIST] ⚠ 转向侧有接近车辆！");
     } else {
         // 仅清除本侧指示灯, 不覆盖 RCW 已设的
@@ -468,6 +474,16 @@ void updateTurnAssist() {
 //    高速 (≥speed_threshold): IND_MODE_RCW (4Hz快闪) + 蜂鸣4Hz
 // ===============================================================
 void updateRCW() {
+    // ALARM 测试期间: 强制 RCW 蜂鸣 (绕过正常检测, 用于测试蜂鸣同步)
+    if (alarm_test_until) {
+        if (millis() < alarm_test_until) {
+            buzzer_mode = config.sys.rcw_buzzer ? 2 : 0;  // 受蜂鸣开关控制
+            return;
+        }
+        alarm_test_until = 0;
+        buzzer_mode = 0;
+    }
+
     BSDFrame *f = radar.getFrame();
     if (!f->valid) {
         buzzer_mode = 0;
@@ -508,17 +524,18 @@ void updateRCW() {
             }
         }
         
-        // 左侧: 高优先 → 低优先
+        // 左侧: 高优先 → 低优先 (蜂鸣受 rcw_buzzer 开关控制)
         if (leftHigh) {
             if (!rcw_l_active) Serial.println("[RCW] ⚡ 左后方有车辆快速接近!");
             rcw_l_active = true; rcw_l_time = now;
-            ind_left_mode = IND_MODE_RCW; buzzer_mode = 2;
+            ind_left_mode = IND_MODE_RCW;
+            if (config.sys.rcw_buzzer) buzzer_mode = 2;
         } else if (leftLow) {
             if (!rcw_l_active) Serial.println("[RCW] 🔹 左侧盲区有车辆");
             rcw_l_active = true; rcw_l_time = now;
             ind_left_mode = IND_MODE_BSD;
             // 低速蜂鸣有5秒冷却
-            if (now - last_low_beep_l > (unsigned long)config.sys.bsd_beep_cooldown) {
+            if (config.sys.rcw_buzzer && now - last_low_beep_l > (unsigned long)config.sys.bsd_beep_cooldown) {
                 buzzer_mode = 1; last_low_beep_l = now;
             }
         }
@@ -526,12 +543,13 @@ void updateRCW() {
         if (rightHigh) {
             if (!rcw_r_active) Serial.println("[RCW] ⚡ 右后方有车辆快速接近!");
             rcw_r_active = true; rcw_r_time = now;
-            ind_right_mode = IND_MODE_RCW; buzzer_mode = 2;
+            ind_right_mode = IND_MODE_RCW;
+            if (config.sys.rcw_buzzer) buzzer_mode = 2;
         } else if (rightLow) {
             if (!rcw_r_active) Serial.println("[RCW] 🔹 右侧盲区有车辆");
             rcw_r_active = true; rcw_r_time = now;
             ind_right_mode = IND_MODE_BSD;
-            if (now - last_low_beep_r > (unsigned long)config.sys.bsd_beep_cooldown) {
+            if (config.sys.rcw_buzzer && now - last_low_beep_r > (unsigned long)config.sys.bsd_beep_cooldown) {
                 buzzer_mode = 1; last_low_beep_r = now;
             }
         }

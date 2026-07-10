@@ -40,6 +40,7 @@ struct SystemParams {
     char wifi_pass[32]     = "12345678";
     int  led_brightness    = 255;
     int  bsd_beep_cooldown = 5000;
+    int  rcw_buzzer        = 1;   // 后方监测蜂鸣开关 (1=开 0=关, 同时控制主控蜂鸣器和C3扬声器)
 };
 
 struct RadarParams {
@@ -84,6 +85,7 @@ public:
         s["wifi_ssid"] = sys.wifi_ssid;
         s["bsd_beep_cooldown"] = sys.bsd_beep_cooldown;
         s["led_brightness"] = sys.led_brightness;
+        s["rcw_buzzer"] = sys.rcw_buzzer;
 
         JsonObject rd = doc["radar"].to<JsonObject>();
         rd["det_range"]   = radar.det_range;
@@ -119,6 +121,7 @@ public:
         if (s) {
             if (s["wifi_ssid"]) strlcpy(sys.wifi_ssid, s["wifi_ssid"], sizeof(sys.wifi_ssid));
             sys.bsd_beep_cooldown = s["bsd_beep_cooldown"] | sys.bsd_beep_cooldown;
+            sys.rcw_buzzer        = s["rcw_buzzer"] | sys.rcw_buzzer;
         }
         JsonObject rd = doc["radar"];
         if (rd) {

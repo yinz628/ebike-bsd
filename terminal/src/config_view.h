@@ -25,10 +25,10 @@ private:
         int  cfgIdx;   // 对应 state.cfg[] 的索引 (GETCFG 响应顺序), -1=无
     };
 
-    // params 顺序与主控 GETCFG 响应 ($CFG,v0..v13) 对齐 (14 个值):
+    // params 顺序与主控 GETCFG 响应 ($CFG,v0..v14) 对齐 (15 个值):
     //   0:rcw_low 1:rcw_speed 2:rcw_range 3:rcw_lateral 4:rcw_hold 5:rcw_lflash 6:rcw_flash
-    //   7:turn_speed 8:turn_range 9:turn_lateral 10:beep_cool 11:det_range 12:sensitivity 13:wifi_on
-    static const int NPARAM = 13;
+    //   7:turn_speed 8:turn_range 9:turn_lateral 10:beep_cool 11:rcw_buzzer 12:det_range 13:sensitivity 14:wifi_on
+    static const int NPARAM = 14;
     Param params[NPARAM] = {
         // RCW
         {"rcw_low",     "LOW_V",  2,    1,   0, 5,      "m/s", 0},
@@ -44,16 +44,16 @@ private:
         {"turn_lateral","T_LAT",  3,    1,   1, 10,     "m",   9},
         // SYS
         {"beep_cool",   "BEEP_CD",5000, 500, 1000,10000,"ms",  10},
-        {"det_range",   "D_RNG",  30,   5,   5, 50,     "m",   11},
-        {"sensitivity", "SENS",   2,    1,   0, 10,     "",    12},
+        {"rcw_buzzer",  "BUZZ",   1,    1,   0, 1,      "",    11},
+        {"det_range",   "D_RNG",  30,   5,   5, 50,     "m",   12},
+        {"sensitivity", "SENS",   2,    1,   0, 10,     "",    13},
     };
 
-    // tab 分组: 0=SYS, 1=RCW1, 2=RCW2, 3=TURN (SYS 放首页, 进配置页先看系统状态)
-    // params 数组顺序不变, tabStart/tabCount 按显示顺序重映射
+    // tab 分组: 0=SYS, 1=RCW1, 2=RCW2, 3=TURN (SYS 放首页)
     static const int NTAB = 4;
-    // SYS(10,11,12) RCW1(0,1,2,3) RCW2(4,5,6) TURN(7,8,9)
+    // SYS(10,11,12,13) RCW1(0,1,2,3) RCW2(4,5,6) TURN(7,8,9)
     const int tabStart[NTAB] = {10, 0, 4, 7};
-    const int tabCount[NTAB] = {3, 4, 3, 3};
+    const int tabCount[NTAB] = {4, 4, 3, 3};
     const char *tabName[NTAB] = {"SYS", "RCW1", "RCW2", "TURN"};
 
     int tab = 0;
@@ -279,7 +279,7 @@ private:
         if (!st.cfg_valid) return;
         for (int i = 0; i < NPARAM; i++) {
             int ci = params[i].cfgIdx;
-            if (ci >= 0 && ci < 14) params[i].value = st.cfg[ci];
+            if (ci >= 0 && ci < 15) params[i].value = st.cfg[ci];
         }
     }
 

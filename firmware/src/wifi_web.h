@@ -149,6 +149,7 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:16px 0}
  <div class="row"><label>灵敏度</label><select id="rd_sens" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:90px"><option value="0">0 (最灵敏)</option><option value="1">1</option><option value="2">2 (默认)</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10 (最不灵敏)</option></select><span class="unit">档</span></div>
  <div class="row"><label>WiFi</label><button onclick="wifiOff()" style="flex:1;max-width:80px;padding:6px;border:1px solid var(--danger);border-radius:6px;background:var(--bg);color:var(--danger);font-size:12px;cursor:pointer">关闭WiFi</button><span class="unit" style="font-size:10px;color:var(--muted)">立即生效,下次开机重开</span></div>
 <div class="row"><label>蜂鸣冷却</label><input id="s_cool" type="number" step="500"><span class="unit">ms</span></div>
+ <div class="row"><label>后方蜂鸣</label><select id="s_buzz" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:90px"><option value="1">开启</option><option value="0">关闭</option></select><span class="unit">RCW后方监测蜂鸣 (转向辅助不受此控制)</span></div>
 </div>
 
 <button class="btn btn-save" onclick="save()">💾 保存当前配置</button>
@@ -175,6 +176,7 @@ async function loadCfg(){
   q('#t_rmin').value=t.right_min||5;q('#t_rmax').value=t.right_max||40;
   q('#t_spd').value=t.speed;q('#t_rng').value=t.range;q('#t_lat').value=t.lateral||3;
   q('#s_cool').value=s.bsd_beep_cooldown||5000;
+  q('#s_buzz').value=(s.rcw_buzzer!==undefined?s.rcw_buzzer:1);
   var rd=j.radar||{};
   q('#rd_rng').value=rd.det_range||30;
   q('#rd_sens').value=(rd.sensitivity!==undefined?rd.sensitivity:2);
@@ -186,7 +188,7 @@ async function save(){
  var cfg={
   rcw:{left_min:+q('#r_lmin').value,left_max:+q('#r_lmax').value,right_min:+q('#r_rmin').value,right_max:+q('#r_rmax').value,low_speed:+q('#r_low').value,speed:+q('#r_spd').value,range:+q('#r_rng').value,lateral:+q('#r_lat').value,hold:+q('#r_hold').value,lflash:+q('#r_lflash').value,flash:+q('#r_flash').value},
   turn:{left_min:+q('#t_lmin').value,left_max:+q('#t_lmax').value,right_min:+q('#t_rmin').value,right_max:+q('#t_rmax').value,speed:+q('#t_spd').value,range:+q('#t_rng').value,lateral:+q('#t_lat').value},
-  sys:{bsd_beep_cooldown:+q('#r_cool').value},
+  sys:{bsd_beep_cooldown:+q('#r_cool').value,rcw_buzzer:+q('#s_buzz').value},
   radar:{det_range:+q('#rd_rng').value,sensitivity:+q('#rd_sens').value}
  };
  try{

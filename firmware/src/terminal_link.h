@@ -70,10 +70,10 @@ private:
             return;
         }
 
-        // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,14个值\n (整包回传)
+        // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,15个值\n (整包回传)
         if (cmd == "GETCFG") {
             char buf[200];
-            snprintf(buf, sizeof(buf), "$CFG,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+            snprintf(buf, sizeof(buf), "$CFG,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
                 config.rcw.low_speed,
                 config.rcw.speed_threshold,
                 config.rcw.range_limit,
@@ -85,6 +85,7 @@ private:
                 config.turn.range_limit,
                 config.turn.lateral_limit,
                 config.sys.bsd_beep_cooldown,
+                config.sys.rcw_buzzer,
                 config.radar.det_range,
                 config.radar.sensitivity,
                 g_wifi_running ? 1 : 0);
@@ -140,6 +141,7 @@ private:
         else if (key == "sensitivity")    { config.radar.sensitivity   = val; changed = true; }
         else if (key == "det_range")      { config.radar.det_range     = val; changed = true; }
         else if (key == "beep_cool")      { config.sys.bsd_beep_cooldown = val; changed = true; }
+        else if (key == "rcw_buzzer")     { config.sys.rcw_buzzer = val; changed = true; }
 
         if (changed) {
             // 灵敏度/距离类参数需下发雷达; 其他只存 config
