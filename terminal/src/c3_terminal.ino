@@ -51,7 +51,7 @@ bool readTouch(int *x, int *y) {
 #define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
 #define ENABLE_STATUS_VIEW    // P3: 状态页
 #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
-#define ENABLE_ALERT_SOUND    // P4: ES8311 报警音
+#define ENABLE_ALERT_SOUND    // P4: ES8311 报警音 (功放默认关闭, 播放时才使能)
 
 // 主控离线时显示模拟数据 (验证视图用; 接上主控后自动切换真实数据)
 #define DEMO_WHEN_OFFLINE
@@ -94,7 +94,7 @@ void updatePages() {
 // ============ SETUP ============
 void setup() {
     Serial.begin(115200);
-    delay(200);
+    delay(3000);  // ⚠ USB 供电需 3s 延迟让电源稳定, 否则 LovyanGFX + 背光初始化时掉电重启
     Serial.println("\n=== ebike-bsd C3 终端 V0.1 ===");
     Serial.println("Hardware: 立创实战派 ESP32-C3");
 
@@ -103,17 +103,18 @@ void setup() {
 
     // 屏幕 (ENABLE_DISPLAY: 第1步验证屏幕点亮 + 颜色/方向)
 #ifdef ENABLE_DISPLAY
-    // ⚠ 背光: 实战派 C3 的背光 GPIO2 是低电平点亮 (官方 BK_LIGHT_ON_LEVEL=0)
-    //   LovyanGFX 的 Light_PWM 默认高电平, 会反向. 先手动拉低点亮背光.
-    pinMode(2, OUTPUT);
-    digitalWrite(2, LOW);   // 低电平点亮背光
-
+    // ⚠ 先初始化屏幕和 I2C, 再开背光 (减少 USB 供电下启动峰值电流)
+    // 注: 不启用 DMA (initDMA), 实测 ESP32-C3 rev0.4 + USB 供电下 DMA 连续传输会导致掉电重启
     lcd.init();
-    lcd.initDMA();
 
     // I2C 总线初始化 (触摸 FT6336 / ES8311 / 传感器共用, SDA=0/SCL=1)
     Wire.begin(TOUCH_SDA, TOUCH_SCL);
     Wire.setClock(100000);
+
+    // 背光: 实战派 C3 的背光 GPIO2 是低电平点亮 (官方 BK_LIGHT_ON_LEVEL=0)
+    //   LovyanGFX 的 Light_PWM 默认高电平, 会反向. 直接用 digitalWrite 手动拉低.
+    pinMode(2, OUTPUT);
+    digitalWrite(2, LOW);   // 低电平点亮背光
 
     Serial.printf("[LCD] %dx%d 初始化完成\n", lcd.width(), lcd.height());
 #else

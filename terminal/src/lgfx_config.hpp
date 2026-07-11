@@ -11,7 +11,7 @@
 
 // 实战派 C3 屏幕引脚 (SPI) — 与官方例程完全一致
 #define LCD_MOSI  5
-#define LCD_MISO  -1    // 屏幕只写不读
+#define LCD_MISO  7     // 屏幕只写不读; ⚠ ESP32-C3 必须给一个有效 GPIO 否则 spiAttachMISO 报错崩溃
 #define LCD_SCLK  3
 #define LCD_CS    4
 #define LCD_DC    6
@@ -37,7 +37,7 @@ public:
             auto cfg = _bus.config();
             cfg.spi_host = SPI2_HOST;       // ESP32-C3: SPI2
             cfg.spi_mode = 0;
-            cfg.freq_write = 20000000;      // 20MHz (官方例程值, 先稳定排查; 验证后可升 40MHz)
+            cfg.freq_write = 10000000;      // 10MHz (USB 供电下降低功耗, 原 20MHz 可能触发掉电)
             cfg.freq_read  = 16000000;
             cfg.spi_3wire  = true;          // MISO 不用
             cfg.use_lock   = true;

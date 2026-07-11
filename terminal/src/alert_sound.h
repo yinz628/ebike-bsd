@@ -21,28 +21,25 @@
 #define I2S_SAMPLE_RATE 16000
 
 #define ES8311_I2C_ADDR  0x18
-#define PA_ENABLE_PIN    13    // NS4150B 功放使能
+#define PA_ENABLE_PIN    13    // NS4150B 功放使能 (高=输出)
 
 class AlertSound {
 private:
-    uint8_t lastMode = 255;     // 上次模式 (检测变化)
-    unsigned long phaseStart;   // 当前模式开始时间
-    unsigned long lastToggle;   // 4Hz 闪烁计时
+    uint8_t lastMode = 255;
+    unsigned long phaseStart;
+    unsigned long lastToggle;
     bool toneOn = false;
-    bool _ok = false;           // 初始化是否成功
+    bool _ok = false;
 
-    // 简单方波样本缓冲
-    static const int BUF_SAMPLES = 800;   // 100ms @ 8kHz (增大缓冲, 减少断续)
+    static const int BUF_SAMPLES = 800;   // 100ms @ 8kHz
     int16_t bufSilence[BUF_SAMPLES];
     int16_t bufTone[BUF_SAMPLES];
 
-    // 阻塞写入: portMAX_DELAY 等待 DMA 缓冲有空位, 保证数据不丢
     void playBuf(const int16_t *buf, size_t n) {
         size_t written = 0;
         i2s_write(I2S_NUM_0, buf, n * 2, &written, portMAX_DELAY);
     }
 
-    // ES8311 寄存器写入辅助
     void writeES8311Reg(uint8_t reg, uint8_t val) {
         Wire.beginTransmission(ES8311_I2C_ADDR);
         Wire.write(reg);
@@ -52,10 +49,10 @@ private:
 
 public:
     void init() {
-        // 1. 先打开功放 (NS4150B, GPIO13 高电平使能)
+        // 1. 功放使能引脚初始化 — 默认关闭省电, 播放时才使能
         pinMode(PA_ENABLE_PIN, OUTPUT);
-        digitalWrite(PA_ENABLE_PIN, HIGH);
-        Serial.println("[SND] 功放 NS4150B 已使能 (GPIO13=HIGH)");
+        digitalWrite(PA_ENABLE_PIN, LOW);
+        Serial.println("[SND] 功放 NS4150B 初始化 (默认关闭)");
 
         // 2. 初始化 I2S
         i2s_config_t cfg = {};
@@ -78,36 +75,33 @@ public:
         pins.ws_io_num        = I2S_WS;
         pins.data_out_num     = I2S_DOUT;
         pins.data_in_num      = I2S_DIN;
-        pins.mck_io_num       = I2S_MCLK;     // ⚠ 必须配 MCLK, ES8311 需要主时钟
+        pins.mck_io_num       = I2S_MCLK;
         i2s_set_pin(I2S_NUM_0, &pins);
 
         // 3. 预生成波形 (2kHz 方波 + 静音)
-        //    16kHz 采样率下 2kHz = 每周期 8 样本, 半周期 4 样本
         for (int i = 0; i < BUF_SAMPLES; i++) {
             bufTone[i]    = ((i % 8) < 4) ? 10000 : -10000;
             bufSilence[i] = 0;
         }
 
-        // 4. ES8311 寄存器初始化 (I2C 配成 I2S → DAC 播放模式)
-        //    Wire 已在 c3_terminal.ino setup 里 begin(0,1), 这里不重复
+        // 4. ES8311 寄存器配置
         initES8311Basic();
 
         _ok = true;
-        Serial.println("[SND] I2S + ES8311 就绪, 播放开机自检音...");
-
-        // 开机自检: 播放 500ms 1kHz 方波 (确认功放+ES8311+I2S 链路通)
-        unsigned long t0 = millis();
-        while (millis() - t0 < 500) {
-            playBuf(bufTone, BUF_SAMPLES);
-        }
-        playBuf(bufSilence, BUF_SAMPLES);
-        Serial.println("[SND] 自检音完成");
+        Serial.println("[SND] I2S + ES8311 就绪 (功放默认关闭)");
     }
 
-    // 主循环调用: 按 mode 播放
+    // 主循环调用: 按 mode 播放; 无声音时关功放省电
     void update(uint8_t mode) {
         if (!_ok) return;
+
+        // 模式变化时控制功放使能 (静音=关, 有声=开)
         if (mode != lastMode) {
+            if (mode == 0) {
+                digitalWrite(PA_ENABLE_PIN, LOW);   // 静音 → 关功放
+            } else {
+                digitalWrite(PA_ENABLE_PIN, HIGH);  // 播放 → 开功放
+            }
             lastMode = mode;
             phaseStart = millis();
             lastToggle = millis();
@@ -141,57 +135,37 @@ public:
     }
 
 private:
-    // ES8311 初始化 — 完全移植自乐鑫官方 es8311 驱动 (managed_components/espressif__es8311)
-    // 配置: 16kHz, 16bit, I2S Slave, MCLK 从 MCLK pin 输入 (6.144MHz = 16000×384)
-    // 系数表 coeff_div[6144000, 16000]: pre_div=3, multi=1, adc_div=1, dac_div=1,
-    //   fs_mode=0, lrck_h=0, lrck_l=0xff, bclk_div=4, adc_osr=0x10, dac_osr=0x10
     void initES8311Basic() {
-        // 1) 复位序列 (REG00)
-        writeES8311Reg(0x00, 0x1F);   // reset
+        // 1) 复位序列
+        writeES8311Reg(0x00, 0x1F);
         delay(20);
         writeES8311Reg(0x00, 0x00);
         writeES8311Reg(0x00, 0x80);   // 上电
 
-        // 2) 时钟配置 (mclk_from_mclk_pin=true, MCLK=6144000Hz)
-        // REG01: 0x3F = 使能所有时钟, MCLK 从 MCLK pin 取 (bit7=0)
+        // 2) 时钟配置
         writeES8311Reg(0x01, 0x3F);
-
-        // REG02: pre_div=3, pre_multi=1 → (3-1)<<5 | 1<<3 | 0 = 0x48
-        //   (官方代码: regv &= 0x07; regv |= (pre_div-1)<<5; regv |= pre_multi<<3)
         writeES8311Reg(0x02, 0x48);
-
-        // REG03: fs_mode=0 << 6 | adc_osr=0x10 = 0x10
         writeES8311Reg(0x03, 0x10);
-        // REG04: dac_osr=0x10
         writeES8311Reg(0x04, 0x10);
-        // REG05: (adc_div-1)<<4 | (dac_div-1) = 0<<4 | 0 = 0x00
         writeES8311Reg(0x05, 0x00);
-        // REG06: bclk_div=4, sclk 不反转 → 0xE0 & 0xDF | (4-1) = 0xC0 | 0x03 = 0xC3
-        //   (官方: regv &= 0xE0; if(bclk_div<19) regv |= bclk_div-1)
         writeES8311Reg(0x06, 0xC3);
-        // REG07: lrck_h=0x00 → 0xC0 & 0xC0 | 0x00 = 0xC0
-        //   (官方: regv &= 0xC0; regv |= lrck_h)
         writeES8311Reg(0x07, 0xC0);
-        // REG08: lrck_l=0xff
         writeES8311Reg(0x08, 0xFF);
 
-        // 3) 数据格式: I2S Slave, 16bit
-        // REG00 bit6=0 → slave (已在 0x80 中, bit6=0)
-        // REG09 (SDP In/DAC): 16bit → (3<<2) = 0x0C
+        // 3) 数据格式
         writeES8311Reg(0x09, 0x0C);
-        // REG0A (SDP Out/ADC): 16bit → 0x0C
         writeES8311Reg(0x0A, 0x0C);
 
-        // 4) 系统/模拟上电 (官方 es8311_init 关键序列)
-        writeES8311Reg(0x0D, 0x01);   // 上电模拟电路
-        writeES8311Reg(0x0E, 0x02);   // 使能 analog PGA + ADC modulator
-        writeES8311Reg(0x12, 0x00);   // 上电 DAC
-        writeES8311Reg(0x13, 0x10);   // 使能 HP drive 输出
-        writeES8311Reg(0x1C, 0x6A);   // ADC EQ bypass, 消 DC offset
-        writeES8311Reg(0x37, 0x08);   // DAC EQ bypass
+        // 4) 模拟上电
+        writeES8311Reg(0x0D, 0x01);
+        writeES8311Reg(0x0E, 0x02);
+        writeES8311Reg(0x12, 0x00);
+        writeES8311Reg(0x13, 0x10);
+        writeES8311Reg(0x1C, 0x6A);
+        writeES8311Reg(0x37, 0x08);
 
-        // 5) 音量 (REG32: 0=静音, 255=最大; volume=70 → 70*256/100-1=178)
-        writeES8311Reg(0x32, 0xB2);   // ~70% 音量
+        // 5) 音量
+        writeES8311Reg(0x32, 0xB2);   // ~70%
 
         Serial.println("[SND] ES8311 寄存器已配置 (16kHz/16bit/I2S slave)");
     }
