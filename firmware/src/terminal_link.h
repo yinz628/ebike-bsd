@@ -147,6 +147,7 @@ private:
         else if (key == "rcw_buzzer")     { config.sys.rcw_buzzer = val; changed = true; }
 
         if (changed) {
+            config.sanitize();   // 统一范围校验 (防 C3 传入 0/负数/超限值)
             // 灵敏度/距离类参数需下发雷达; 其他只存 config
             if (key == "sensitivity" || key == "det_range") {
                 radar.setBSDMode();

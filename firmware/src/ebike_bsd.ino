@@ -43,11 +43,9 @@
 
 // ============ 常量 ============
 #define BLINK_INTERVAL_NORMAL   667   // 1.5Hz 正常闪烁 (ms)
-#define BSD_CRITICAL_SPEED     2      // m/s, >7.2km/h 视为接近
-#define BSD_CRITICAL_RANGE     30     // 米, 30米内视为危险
 #define MAIN_LOOP_DELAY        50     // 主循环周期 (ms)
 #define BUZZER_BEEP_DURATION   150    // 蜂鸣单次时长 (ms)
-#define STATE_DEBOUNCE_MS      50     // 按键消抖
+#define STATE_DEBOUNCE_MS      50     // 按键消抖间隔 (TODO: updateTurnControl 尚未实现消抖)
 
 
 // LED 指示灯模式 (独立状态机)
@@ -79,12 +77,8 @@ unsigned long last_blink_time = 0;
 unsigned long last_bsd_beep_time = 0;
 unsigned long last_buzzer_change = 0;
 bool turn_led_on = false;         // 当前LED亮灭
-bool bsd_l_warned = false;       // 左侧已预警
-bool bsd_r_warned = false;       // 右侧已预警
 bool bsd_l_active = false;       // 左盲区当前有目标
 bool bsd_r_active = false;       // 右盲区当前有目标
-unsigned long bsd_l_led_time = 0;  // 左LED最后触发时间
-unsigned long bsd_r_led_time = 0;  // 右LED最后触发时间
 
 // LED 模式 (由各子系统设置, updateIndicatorLEDs 集中刷新)
 int ind_left_mode  = IND_MODE_OFF;   // 左指示灯当前模式
@@ -128,6 +122,7 @@ void setup() {
     esp_task_wdt_deinit();
     
     Serial.begin(SERIAL_DEBUG_BAUD);
+    Serial.setTimeout(50);   // readStringUntil 最多阻塞 50ms (默认 1000ms 会卡住 loop)
     Serial.println();
     Serial.println("=== e-Bike BSD Turn Signal System (V2.7) ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
@@ -457,12 +452,8 @@ void updateTurnAssist() {
         buzzer_mode = 3;  // 转向辅助: 持续长鸣 (不受蜂鸣开关控制)
         Serial.println("[ASSIST] ⚠ 转向侧有接近车辆！");
     } else {
-        // 仅清除本侧指示灯, 不覆盖 RCW 已设的
-        if (turn_state == TURN_LEFT && !rcw_l_active) {
-            // LED mode cleared by ind_left_mode reset at top of loop
-        } else if (turn_state == TURN_RIGHT && !rcw_r_active) {
-            // LED mode cleared by ind_right_mode reset at top of loop
-        }
+        // 危险解除: 指示灯模式由 loop 顶层每轮重置为 OFF, 这里只需解除蜂鸣
+        // (转向灯仍开着但危险消失时, 蜂鸣应停止)
         if ((buzzer_mode == 2 || buzzer_mode == 3) && !rcw_l_active && !rcw_r_active) {
             buzzer_mode = 0;
         }
@@ -543,7 +534,7 @@ void updateRCW() {
             ind_left_mode = IND_MODE_BSD;
             // 低速蜂鸣有5秒冷却
             if (config.sys.rcw_buzzer && now - last_low_beep_l > (unsigned long)config.sys.bsd_beep_cooldown) {
-                buzzer_mode = 1; last_low_beep_l = now;
+                buzzer_mode = 1; last_buzzer_change = now; last_low_beep_l = now;
             }
         }
         // 右侧: 高优先 → 低优先
@@ -557,7 +548,7 @@ void updateRCW() {
             rcw_r_active = true; rcw_r_time = now;
             ind_right_mode = IND_MODE_BSD;
             if (config.sys.rcw_buzzer && now - last_low_beep_r > (unsigned long)config.sys.bsd_beep_cooldown) {
-                buzzer_mode = 1; last_low_beep_r = now;
+                buzzer_mode = 1; last_buzzer_change = now; last_low_beep_r = now;
             }
         }
     }
@@ -605,33 +596,36 @@ void setTurnLEDs(bool on, bool left, bool right) {
 // ===============================================================
 void updateIndicatorLEDs() {
     unsigned long now = millis();
-    
+    // config.sanitize() 保证 flash_interval/lflash_interval >= 10, 这里安全除法
+    unsigned long fi  = config.rcw.flash_interval;
+    unsigned long lfi = config.rcw.lflash_interval;
+
     // 左指示灯
     switch (ind_left_mode) {
         case IND_MODE_OFF:
             digitalWrite(INDICATOR_L_PIN, LOW);
             break;
         case IND_MODE_BSD:
-            digitalWrite(INDICATOR_L_PIN, ((now / (unsigned long)config.rcw.lflash_interval) % 2 == 0));
+            digitalWrite(INDICATOR_L_PIN, ((now / lfi) % 2 == 0));
             break;
         case IND_MODE_RCW:
-            digitalWrite(INDICATOR_L_PIN, ((now / (unsigned long)config.rcw.flash_interval) % 2 == 0));
+            digitalWrite(INDICATOR_L_PIN, ((now / fi) % 2 == 0));
             break;
         case IND_MODE_TURN:
             digitalWrite(INDICATOR_L_PIN, HIGH);
             break;
     }
-    
+
     // 右指示灯
     switch (ind_right_mode) {
         case IND_MODE_OFF:
             digitalWrite(INDICATOR_R_PIN, LOW);
             break;
         case IND_MODE_BSD:
-            digitalWrite(INDICATOR_R_PIN, ((now / (unsigned long)config.rcw.lflash_interval) % 2 == 0));
+            digitalWrite(INDICATOR_R_PIN, ((now / lfi) % 2 == 0));
             break;
         case IND_MODE_RCW:
-            digitalWrite(INDICATOR_R_PIN, ((now / (unsigned long)config.rcw.flash_interval) % 2 == 0));
+            digitalWrite(INDICATOR_R_PIN, ((now / fi) % 2 == 0));
             break;
         case IND_MODE_TURN:
             digitalWrite(INDICATOR_R_PIN, HIGH);
@@ -661,8 +655,8 @@ void updateBuzzer() {
 
         case 2:  // RCW: 4Hz beep (仅碰撞预警)
             if (rcw_l_active || rcw_r_active) {
-                int beepInterval = config.rcw.flash_interval;
-                bool beepOn = ((now / beepInterval) % 2 == 0);
+                // config.sanitize() 保证 flash_interval >= 10, 安全除法
+                bool beepOn = ((now / (unsigned long)config.rcw.flash_interval) % 2 == 0);
                 digitalWrite(BUZZER_PIN, beepOn ? HIGH : LOW);
             } else {
                 digitalWrite(BUZZER_PIN, LOW);
@@ -671,7 +665,13 @@ void updateBuzzer() {
             break;
 
         case 3:  // 转向辅助: 持续长鸣
-            digitalWrite(BUZZER_PIN, HIGH);
+            // 转向灯已关 → 回静音 (修复: 原先 updateTurnAssist 不再被调用导致卡死长鸣)
+            if (turn_state == TURN_OFF) {
+                digitalWrite(BUZZER_PIN, LOW);
+                buzzer_mode = 0;
+            } else {
+                digitalWrite(BUZZER_PIN, HIGH);
+            }
             break;
     }
 }

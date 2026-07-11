@@ -129,6 +129,34 @@ public:
             radar.sensitivity = rd["sensitivity"] | radar.sensitivity;
         }
 
+        sanitize();   // 统一范围校验, 防除零/负数/超限
+    }
+
+    // 参数范围校验 (防除零/负数/超限导致逻辑错乱或崩溃)
+    // 由 fromJson() 和 terminal_link.h applyCommand() 在配置变更后调用
+    void sanitize() {
+        // 闪烁间隔: 最小 10ms, 防除零 (ebike_bsd.ino 里用 now/interval 做软件闪烁)
+        rcw.flash_interval  = constrain(rcw.flash_interval,  10, 60000);
+        rcw.lflash_interval = constrain(rcw.lflash_interval, 10, 60000);
+        // 距离: 1~100m
+        rcw.range_limit     = constrain(rcw.range_limit,   1, 100);
+        turn.range_limit    = constrain(turn.range_limit,  1, 100);
+        // 横向距离: 1~10m
+        rcw.lateral_limit   = constrain(rcw.lateral_limit, 1, 10);
+        turn.lateral_limit  = constrain(turn.lateral_limit, 1, 10);
+        // 速度阈值: >=0 m/s
+        rcw.low_speed       = max(rcw.low_speed, 0);
+        rcw.speed_threshold = max(rcw.speed_threshold, 0);
+        turn.speed_threshold= max(turn.speed_threshold, 0);
+        // 保持时间: 0~60s
+        rcw.hold_time       = constrain(rcw.hold_time, 0, 60000);
+        // 雷达: 距离 5~50m, 灵敏度 0~10
+        radar.det_range     = constrain(radar.det_range, 5, 50);
+        radar.sensitivity   = constrain(radar.sensitivity, 0, 10);
+        // 蜂鸣冷却: >=500ms
+        sys.bsd_beep_cooldown = max(sys.bsd_beep_cooldown, 500);
+        // 蜂鸣开关: 0 或 1
+        sys.rcw_buzzer      = sys.rcw_buzzer ? 1 : 0;
     }
 
     // ---- NVS 持久化 ----
@@ -145,7 +173,7 @@ public:
             Serial.println(err.c_str());
             return false;
         }
-        fromJson(doc);
+        fromJson(doc);   // fromJson 末尾会调 sanitize() 校验参数范围
         Serial.println("[CONFIG] loaded from NVS");
         return true;
     }

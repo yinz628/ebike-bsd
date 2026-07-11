@@ -60,6 +60,13 @@ struct TerminalState {
         cfg_valid = false; cfg_seq = 0; wifi_on = false;
         last_frame_ms = 0; online = false;
     }
+    // 清除来自主控的动态状态 (目标/报警/指示), 保留本地配置 (cfg/det_range).
+    // 主控离线时调用, 防止幽灵目标和残留报警. 新增动态字段时在此集中维护.
+    void clearDynamic() {
+        obj_num = 0; bz_mode = 0; ind_l = 0; ind_r = 0; turn = 0;
+        rcw_l = rcw_r = false; valid = false;
+        memset(objs, 0, sizeof(objs));
+    }
 };
 
 // 把逗号分隔的 ASCII 帧解析到 TerminalState
@@ -109,13 +116,16 @@ inline bool parseFrame(const String &frame, TerminalState &out) {
 class UartLink {
 private:
     HardwareSerial *_serial;
-    String _rx_buf;
+    char _rx_buf[300];          // 接收缓冲 (栈分配, 避免 String += 的每字节堆碎片)
+    int  _rx_len;               // 缓冲当前长度
     unsigned long _last_rx;
 
 public:
     TerminalState state;
 
-    UartLink() : _serial(nullptr), _last_rx(0) {}
+    UartLink() : _serial(nullptr), _rx_len(0), _last_rx(0) {
+        _rx_buf[0] = '\0';
+    }
 
     void init() {
         // C3 UART1: GPIO19=RX, GPIO18=TX (与主控 GPIO18/19 交叉对接)
@@ -155,10 +165,13 @@ public:
         while (_serial->available()) {
             char c = (char)_serial->read();
             if (c == '\n') {
-                _rx_buf.trim();
-                if (_rx_buf.startsWith("$S,")) {
-                    String body = _rx_buf.substring(3);   // 去掉 "$S,"
-                    TerminalState ns = state;              // 保留 det_range 等本地字段
+                _rx_buf[_rx_len] = '\0';   // 结束字符串
+                // 跳过前导空白
+                char *p = _rx_buf;
+                while (*p == ' ' || *p == '\t') p++;
+                if (strncmp(p, "$S,", 3) == 0) {
+                    String body(p + 3);             // 仅在完整帧时创建一次 String (去掉 "$S,")
+                    TerminalState ns = state;       // 保留 det_range 等本地字段
                     if (parseFrame(body, ns)) {
                         ns.last_frame_ms = millis();
                         ns.online = true;
@@ -166,20 +179,26 @@ public:
                         _last_rx = millis();
                     }
                 }
-                else if (_rx_buf.startsWith("$CFG,")) {
-                    // 主控回传配置: $CFG,v0,v1,...,v11 (12 个值, 最后一个是 wifi_on)
-                    parseCfg(_rx_buf.substring(5));
+                else if (strncmp(p, "$CFG,", 5) == 0) {
+                    // 主控回传配置: $CFG,v0,v1,...,v14 (15 个值, 最后一个是 wifi_on)
+                    parseCfg(String(p + 5));
                 }
-                _rx_buf = "";
+                _rx_len = 0;       // 重置缓冲
+                _rx_buf[0] = '\0';
             } else if (c != '\r') {
-                _rx_buf += c;
-                if (_rx_buf.length() > 256) _rx_buf = "";   // 防溢出
+                if (_rx_len < (int)sizeof(_rx_buf) - 1) {
+                    _rx_buf[_rx_len++] = c;   // 无堆分配的字符累积
+                } else {
+                    _rx_len = 0;              // 溢出保护: 丢弃重置
+                    _rx_buf[0] = '\0';
+                }
             }
         }
 
-        // 3 秒没收到帧 → 离线
+        // 3 秒没收到帧 → 离线, 清除动态状态 (防幽灵目标 + 残留报警, 安全要求)
         if (state.online && _last_rx > 0 && millis() - _last_rx > 3000) {
             state.online = false;
+            state.clearDynamic();
         }
     }
 

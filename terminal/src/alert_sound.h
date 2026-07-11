@@ -30,6 +30,7 @@ private:
     unsigned long lastToggle;
     bool toneOn = false;
     bool _ok = false;
+    bool _pa_enabled = false;    // 功放使能状态跟踪 (按需开关省电)
 
     static const int BUF_SAMPLES = 800;   // 100ms @ 8kHz
     int16_t bufSilence[BUF_SAMPLES];
@@ -91,47 +92,57 @@ public:
         Serial.println("[SND] I2S + ES8311 就绪 (功放默认关闭)");
     }
 
-    // 主循环调用: 按 mode 播放; 无声音时关功放省电
+    // 主循环调用: 按 mode 播放
+    // 功放按需使能: 只在本轮确实要输出方波时才开 PA + 推 I2S,
+    //   静音/静默期直接关 PA + return, 不推 DMA (省电 + 减少 loop 阻塞)
     void update(uint8_t mode) {
         if (!_ok) return;
 
-        // 模式变化时控制功放使能 (静音=关, 有声=开)
+        unsigned long now = millis();
+
+        // 模式变化时重置相位计时
         if (mode != lastMode) {
-            if (mode == 0) {
-                digitalWrite(PA_ENABLE_PIN, LOW);   // 静音 → 关功放
-            } else {
-                digitalWrite(PA_ENABLE_PIN, HIGH);  // 播放 → 开功放
-            }
             lastMode = mode;
-            phaseStart = millis();
-            lastToggle = millis();
+            phaseStart = now;
+            lastToggle = now;
             toneOn = (mode != 0);
         }
 
-        unsigned long now = millis();
-
+        // 判断本轮是否需要出声 (是否要推方波)
+        bool wantTone = false;
         switch (mode) {
-            case 0:  // 静音
-                playBuf(bufSilence, BUF_SAMPLES);
+            case 0:                          // 静音: 不出声
+                wantTone = false;
                 break;
-            case 1:  // BSD 单次短鸣 (100ms)
-                if (now - phaseStart < 100) {
-                    playBuf(bufTone, BUF_SAMPLES);
-                } else {
-                    playBuf(bufSilence, BUF_SAMPLES);
-                }
+            case 1:                          // BSD 单次短鸣: 仅前 100ms 出声
+                wantTone = (now - phaseStart < 100);
                 break;
-            case 2:  // RCW 4Hz 急促 (125ms on / 125ms off)
+            case 2:                          // RCW 4Hz: 125ms on / 125ms off
                 if (now - lastToggle > 125) {
                     toneOn = !toneOn;
                     lastToggle = now;
                 }
-                playBuf(toneOn ? bufTone : bufSilence, BUF_SAMPLES);
+                wantTone = toneOn;
                 break;
-            case 3:  // 转向辅助 持续长鸣
-                playBuf(bufTone, BUF_SAMPLES);
+            case 3:                          // 转向辅助: 持续出声
+                wantTone = true;
                 break;
         }
+
+        // 按需控制功放: 要出声时开, 不出声时关
+        if (wantTone && !_pa_enabled) {
+            digitalWrite(PA_ENABLE_PIN, HIGH);
+            _pa_enabled = true;
+        } else if (!wantTone && _pa_enabled) {
+            digitalWrite(PA_ENABLE_PIN, LOW);
+            _pa_enabled = false;
+        }
+
+        // 只在需要出声时推 I2S DMA, 否则直接返回 (不推静音缓冲)
+        if (!wantTone) return;
+
+        // 所有报警模式都播放同一段 2kHz 方波, 区别仅在 wantTone 的时序逻辑
+        playBuf(bufTone, BUF_SAMPLES);
     }
 
 private:

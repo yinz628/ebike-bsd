@@ -23,16 +23,17 @@ private:
     uint32_t _sum_rx = 0xFFFFFFFF;
 
     // 计算状态摘要, 用于判断是否需要重绘
+    // rx_bytes 量化到 KB (每 1024 字节才算变化), 避免每帧递增导致无谓重绘
     bool summaryChanged(const TerminalState &st) {
         return st.obj_num != _sum_obj
             || st.bz_mode != _sum_bz
             || st.turn    != _sum_turn
             || st.online  != _sum_online
-            || st.rx_bytes!= _sum_rx;
+            || (st.rx_bytes / 1024) != _sum_rx;
     }
     void saveSummary(const TerminalState &st) {
         _sum_obj = st.obj_num; _sum_bz = st.bz_mode; _sum_turn = st.turn;
-        _sum_online = st.online; _sum_rx = st.rx_bytes;
+        _sum_online = st.online; _sum_rx = st.rx_bytes / 1024;   // 存 KB 量化值
     }
 
 public:
