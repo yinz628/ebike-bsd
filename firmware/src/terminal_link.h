@@ -22,8 +22,8 @@ extern TurnState_t turn_state;
 extern int buzzer_mode;
 extern bool rcw_l_active, rcw_r_active;
 extern int ind_left_mode, ind_right_mode;
-extern bool g_wifi_running;   // WiFi AP 开关状态
-extern bool g_wifi_manual;    // C3 手动控制标志 (禁止自动关闭)
+extern bool g_wifi_running;             // WiFi AP 开关状态
+extern unsigned long g_wifi_idle_since; // AP 空闲计时起点 (0=有连接或未开始计时)
 extern AsyncWebServer server;
 
 // ============ 引脚 ============
@@ -101,16 +101,19 @@ private:
         String valStr = cmd.substring(eq + 1);
         int val = valStr.toInt();
 
-        // WiFi 开关: $C,wifi_on=1/0 (C3 触摸面板手动控制, 禁止自动关闭)
+        // WiFi 开关: $C,wifi_on=1/0 (C3 触摸面板手动控制)
+        // 手动开启后仍由主控 loop 的自动关逻辑接管 (30s 无连接自动关),
+        // 不再有"手动开=永久不自动关"的旁路 (历史 g_wifi_manual 已废弃).
         if (key == "wifi_on") {
-            g_wifi_manual = true;   // 手动控制后不再自动关
             if (val) {
-                Serial.println("[TERM] WiFi ON (by C3)");
+                Serial.println("[TERM] WiFi ON (by C3), 30s无连接自动关");
                 WiFi.mode(WIFI_AP);
+                WiFi.setTxPower(WIFI_TX_POWER);   // 与 initWiFi 一致, 降功率省电
                 WiFi.softAP(config.sys.wifi_ssid, config.sys.wifi_pass);
                 delay(100);
                 server.end(); delay(50); server.begin();
                 g_wifi_running = true;
+                g_wifi_idle_since = 0;   // 重置空闲计时, 重新开始 30s 倒计时
             } else {
                 Serial.println("[TERM] WiFi OFF (by C3)");
                 server.end(); delay(50);
@@ -205,59 +208,36 @@ private:
     void pushState() {
         BSDFrame *f = radar.getFrame();
 
-        // 雷达无真实目标时, 生成 3 个移动模拟目标 (验证雷达图动态效果)
-        // 用 millis() 驱动, 目标做左右摆动 + 距离周期变化
-        bool useSim = (!f || !f->valid || f->obj_num == 0);
-        int simN = 0;
-        int8_t simRange[3], simAngle[3], simVelo[3];
-        if (useSim) {
-            unsigned long t = millis();
-            // 目标0: 左后方, 角度 -40~-10 摆动, 距离 8~25
-            simAngle[0] = -25 + (int8_t)(15.0 * sin(t / 2000.0));
-            simRange[0] = 15 + (int8_t)(8.0 * sin(t / 3500.0));
-            simVelo[0]  = 2 + (int8_t)(2.0 * sin(t / 4000.0));
-            // 目标1: 正后方, 距离远近变化
-            simAngle[1] = (int8_t)(5.0 * sin(t / 1500.0));
-            simRange[1] = 20 + (int8_t)(12.0 * sin(t / 5000.0));
-            simVelo[1]  = 1 + (int8_t)(2.0 * sin(t / 3000.0));
-            // 目标2: 右后方, 角度 10~40
-            simAngle[2] = 25 + (int8_t)(12.0 * sin(t / 2500.0));
-            simRange[2] = 30 + (int8_t)(8.0 * sin(t / 4500.0));
-            simVelo[2]  = -1 - (int8_t)(2.0 * sin(t / 3500.0));
-            simN = 3;
-        }
-
-        int objNum = useSim ? simN : f->obj_num;
-        String frame = "$S,";
-        frame += objNum;               frame += ',';
-        frame += buzzer_mode;          frame += ',';
-        frame += rcw_l_active ? 1:0;   frame += ',';
-        frame += rcw_r_active ? 1:0;   frame += ',';
-        frame += ind_left_mode;        frame += ',';
-        frame += ind_right_mode;       frame += ',';
-        frame += (int)turn_state;      frame += ',';
-        frame += radar.getTotalBytes();frame += ',';
-        frame += (f->valid ? 1:0);
+        // 用栈缓冲替代 String 拼接, 避免 10Hz 高频堆分配/释放导致堆碎片化.
+        // 帧格式: $S,obj_num,bz,rcw_l,rcw_r,ind_l,ind_r,turn,rx_bytes,valid
+        //         [,range,angle,velo,id]×N\n
+        char frame[200];
+        int pos = snprintf(frame, sizeof(frame), "$S,%d,%d,%d,%d,%d,%d,%d,%lu,%d",
+            f->obj_num,
+            buzzer_mode,
+            rcw_l_active ? 1 : 0,
+            rcw_r_active ? 1 : 0,
+            ind_left_mode,
+            ind_right_mode,
+            (int)turn_state,
+            radar.getTotalBytes(),
+            f->valid ? 1 : 0);
 
         // 各目标: range,angle,velo,id
-        if (useSim) {
-            for (int i = 0; i < simN; i++) {
-                frame += ','; frame += simRange[i];
-                frame += ','; frame += simAngle[i];
-                frame += ','; frame += simVelo[i];
-                frame += ','; frame += i;
-            }
-        } else {
-            int n = min((int)f->obj_num, BSD_MAX_OBJECTS);
-            for (int i = 0; i < n; i++) {
-                frame += ','; frame += f->objects[i].range;
-                frame += ','; frame += f->objects[i].angle;
-                frame += ','; frame += f->objects[i].velocity;
-                frame += ','; frame += f->objects[i].objId;
-            }
+        int n = min((int)f->obj_num, BSD_MAX_OBJECTS);
+        for (int i = 0; i < n && pos < (int)sizeof(frame) - 16; i++) {
+            int w = snprintf(frame + pos, sizeof(frame) - pos, ",%d,%d,%d,%d",
+                f->objects[i].range,
+                f->objects[i].angle,
+                f->objects[i].velocity,
+                f->objects[i].objId);
+            if (w < 0) break;
+            pos += w;
         }
-        frame += '\n';
-
+        if (pos < (int)sizeof(frame) - 1) {
+            frame[pos++] = '\n';
+            frame[pos] = '\0';
+        }
         _serial->print(frame);
     }
 };

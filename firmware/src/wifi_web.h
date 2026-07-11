@@ -19,11 +19,17 @@ extern int ind_left_mode, ind_right_mode;
 
 AsyncWebServer server(80);
 
+// WiFi 发射功率. 默认 20dBm(100mW) 是主控发烫主因之一.
+// 11dBm(约 13mW) 在 1.5-2m 距离连接稳定, 发热显著降低.
+#define WIFI_TX_POWER  WIFI_POWER_11dBm
+
 void initWiFi() {
     WiFi.mode(WIFI_AP);
+    WiFi.setTxPower(WIFI_TX_POWER);
     WiFi.softAP(config.sys.wifi_ssid, config.sys.wifi_pass);
     Serial.print("[WIFI] AP: "); Serial.print(config.sys.wifi_ssid);
     Serial.print("  IP: "); Serial.println(WiFi.softAPIP());
+    Serial.println("[WIFI] TX power: 11dBm (降功率省电)");
 }
 
 void handleStatus(AsyncWebServerRequest *req) {

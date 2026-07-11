@@ -54,7 +54,11 @@ bool readTouch(int *x, int *y) {
 #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音 (功放默认关闭, 播放时才使能)
 
 // 主控离线时显示模拟数据 (验证视图用; 接上主控后自动切换真实数据)
-#define DEMO_WHEN_OFFLINE
+// 注: 生产环境注释掉, 避免主控离线时显示假目标误导用户
+// #define DEMO_WHEN_OFFLINE
+
+// 心跳日志开关 (每 2 秒打印 [HB] 在线状态; 调试时取消注释, 日常运行关闭省串口开销)
+// #define ENABLE_HB_LOG
 
 #ifdef ENABLE_RADAR_VIEW
 #include "radar_view.h"
@@ -175,7 +179,8 @@ void loop() {
     alertSound.update(netLink.state.bz_mode);
 #endif
 
-    // 心跳 (每 2 秒, 确认固件在跑 + 显示在线状态)
+    // 心跳 (每 2 秒, 确认固件在跑 + 显示在线状态; 仅调试时开启)
+#ifdef ENABLE_HB_LOG
     static unsigned long lastHb = 0;
     if (millis() - lastHb > 2000) {
         lastHb = millis();
@@ -183,6 +188,7 @@ void loop() {
                       netLink.state.online,
                       netLink.state.online ? (millis() - netLink.state.last_frame_ms) : 0);
     }
+#endif
 
     delay(66);   // ~15fps 刷新 (主控 $S 推送 10Hz, 无需更快; 减少 SPI 总线占用防撕裂)
 }

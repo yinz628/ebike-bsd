@@ -10,6 +10,7 @@
 #include "led_control.h"
 #include "config_store.h"
 #include <esp_task_wdt.h>
+#include <esp_bt.h>        // btStop() 关闭蓝牙控制器 (主控仅用 WiFi AP, 不用蓝牙)
 
 #define WDT_TIMEOUT_S 5
 
@@ -97,7 +98,7 @@ unsigned long alarm_test_until = 0;  // ALARM 测试持续到此时间 (0=非测
 
 // WiFi AP 运行状态 (全局, 供 terminal_link.h 的 $WIFI 命令读写)
 bool g_wifi_running = true;
-bool g_wifi_manual = false;   // C3 触摸面板手动控制时=true, 禁止自动关闭
+unsigned long g_wifi_idle_since = 0;   // AP 空闲计时起点 (0=有连接或未开始计时)
 
 // RCW 状态 (参数见config.rcw)
 bool rcw_l_active = false;
@@ -141,8 +142,12 @@ void setup() {
     }
     config.summary();
 
-    // WiFi AP + Web控制台 (每次开机都启动, 120秒无人连自动关)
-    Serial.println("[WIFI] 启动热点 (120秒无人连自动关)...");
+    // WiFi AP + Web控制台 (每次开机都启动, 30秒无人连自动关)
+    // 关闭蓝牙控制器 (主控仅用 WiFi AP 调试, 不用蓝牙, 省电)
+    btStop();
+    Serial.println("[BT] 蓝牙控制器已关闭");
+
+    Serial.println("[WIFI] 启动热点 (30秒无人连自动关)...");
     initWiFi();
     initWebServer();
 
@@ -179,14 +184,13 @@ void setup() {
 void loop() {
     // ==== WiFi 自动关状态机 ====
     // 规则:
-    //   - 开机: WiFi 开
-    //   - 无设备连接 → 30s 后关 WiFi
+    //   - 开机 / C3 手动开 / Web 触发: WiFi 开
+    //   - 任何来源开启后, 无设备连接 → 30s 后关 WiFi
     //   - 有设备连接 → 保持 WiFi 开
     //   - 设备断开 → 重新 30s 倒计时 → 关 WiFi
     static unsigned long wifi_check = 0;
-    static unsigned long wifi_idle_since = 0;   // 0=有连接或未开始计时
 
-    if (g_wifi_running && !g_wifi_manual && millis() - wifi_check > 2000) {
+    if (g_wifi_running && millis() - wifi_check > 2000) {
         wifi_check = millis();
 
         int sta_num = WiFi.softAPgetStationNum();
@@ -194,19 +198,19 @@ void loop() {
         Serial.print("[WIFI] sta=");
         Serial.print(sta_num);
         Serial.print(" idle=");
-        Serial.print(wifi_idle_since ? (millis() - wifi_idle_since) / 1000 : 0);
+        Serial.print(g_wifi_idle_since ? (millis() - g_wifi_idle_since) / 1000 : 0);
         Serial.println("s");
 
         if (sta_num > 0) {
             // 有设备连接 → 重置计时
-            wifi_idle_since = 0;
+            g_wifi_idle_since = 0;
         } else {
             // 无设备连接
-            if (wifi_idle_since == 0) {
-                wifi_idle_since = millis();   // 开始空闲计时
+            if (g_wifi_idle_since == 0) {
+                g_wifi_idle_since = millis();   // 开始空闲计时
             }
 
-            if (millis() - wifi_idle_since >= 30000) {
+            if (millis() - g_wifi_idle_since >= 30000) {
                 Serial.println("[WIFI] 30s无连接, 关闭WiFi");
                 server.end();
                 delay(50);
@@ -330,12 +334,15 @@ void loop() {
     // 7.5) 车把 C3 终端链路 (推送状态 + 接收触摸命令)
     terminalLinkUpdate();
 
-    // 8) 调试输出 (每2秒, WiFi模式下降低频率避免串口争用)
+    // 8) 调试输出 (每2秒, 仅在编译开关 ENABLE_DEBUG_LOG 开启时输出)
+    //    日常运行关闭以减少串口/USB 开销; 调试时在 platformio.ini 定义该宏
+#ifdef ENABLE_DEBUG_LOG
     static unsigned long last_debug = 0;
     if (millis() - last_debug > 2000) {
         last_debug = millis();
         debugOutput();
     }
+#endif
 
     esp_task_wdt_reset();    // 喂看门狗
 
