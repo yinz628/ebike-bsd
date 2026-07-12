@@ -407,22 +407,22 @@ private:
     // $OTAC,<seq>,<hex>,<crc16>
     void handleOtaChunk(const char *body) {
         if (!_ota_active) return;
-        // 解析 seq
-        int p1 = -1, p2 = -1, p3 = -1;
+        // 帧格式: <seq>,<hex>,<crc>   (2 个逗号, 3 个字段)
+        // body 由 update() 去掉了 "$OTAC," 前缀和行尾, crc 在末尾到字符串结束
+        int p1 = -1, p2 = -1;
         for (int i = 0; body[i]; i++) {
             if (body[i] == ',') {
                 if (p1 < 0) p1 = i;
                 else if (p2 < 0) p2 = i;
-                else if (p3 < 0) p3 = i;
             }
         }
-        if (p1 < 0 || p2 < 0 || p3 < 0) {
+        if (p1 < 0 || p2 < 0) {
             otaSendAck(("OTAN," + String(_ota_expect_seq)).c_str());
             return;
         }
         uint32_t seq = (uint32_t)strtoul(String(body).substring(0, p1).c_str(), nullptr, 10);
         String hexPart = String(body).substring(p1 + 1, p2);
-        uint16_t crcRecv = (uint16_t)strtoul(String(body).substring(p2 + 1, p3).c_str(), nullptr, 10);
+        uint16_t crcRecv = (uint16_t)strtoul(String(body).substring(p2 + 1).c_str(), nullptr, 10);
 
         // 期望序号校验 (乱序/重传 → NACK 要求重发期望块)
         if (seq != _ota_expect_seq) {
