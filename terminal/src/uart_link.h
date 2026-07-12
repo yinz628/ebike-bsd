@@ -469,5 +469,5 @@ private:
     }
 };
 
-extern UartLink netLink;   // 沿用 netLink 名, c3_terminal.ino 无需改引用
-C3OtaProgress c3OtaProgress;  // 全局实例 (本头仅被 c3_terminal.ino 包含一次)
+extern UartLink netLink;        // 定义在 c3_terminal.ino
+extern C3OtaProgress c3OtaProgress;  // 定义在 c3_terminal.ino

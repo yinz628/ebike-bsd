@@ -20,9 +20,10 @@
 #define FW_VERSION "V0.2"
 #endif
 
-// 全局对象
+// 全局对象 (uart_link.h 里只 extern 声明, 实际定义在此)
 LGFX lcd;
 UartLink netLink;
+C3OtaProgress c3OtaProgress;
 
 // ============ FT6336 触摸裸 I2C 读取 ============
 // 不用 LovyanGFX 内置驱动 (横屏旋转坐标有偏移), 直接读 FT6336 寄存器 + 手动变换

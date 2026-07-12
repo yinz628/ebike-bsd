@@ -82,8 +82,7 @@ struct OtaStatus {
     size_t c3_relay_total = 0;      // 总块数
     String c3_error;
 };
-// 全局实例 (本头仅被 ebike_bsd.ino 包含一次, 故在此定义而非 extern)
-OtaStatus otaStatus;
+extern OtaStatus otaStatus;   // 定义在 ebike_bsd.ino
 
 // 运行槽信息 (ota_0/ota_1/factory), 供 Web UI 显示
 inline const char* otaGetRunningSlot() {

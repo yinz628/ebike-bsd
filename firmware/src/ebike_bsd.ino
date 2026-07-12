@@ -4,20 +4,26 @@
 //  版本: V2.8 — OTA升级 + WiFi控制台 + JSON配置 + LED闪烁分级 + 目标自动消失 + StaticJsonDocument修复
 // ============================================================
 
-#include <Arduino.h>
-#include "bsd_protocol.h"
-#include "ms60_radar.h"
-#include "led_control.h"
-#include "config_store.h"
-#include <esp_task_wdt.h>
-#include <esp_bt.h>        // btStop() 关闭蓝牙控制器 (主控仅用 WiFi AP, 不用蓝牙)
-
-// ============ 固件版本 (单一真源) ============
-// 所有展示点 (启动横幅/Web/OLED/终端) 统一引用此宏, 避免多处分歧.
+// ============ 固件版本 (单一真源, 必须在所有项目头文件之前定义) ============
+// 所有展示点 (启动横幅/Web/终端) 和 ota_manager.h/wifi_web.h 统一引用此宏.
 // platformio.ini 的 -D APP_VERSION 同步写入 esp_app_desc_t 供 OTA/esptool 读取.
 #ifndef FW_VERSION
 #define FW_VERSION "V2.8"
 #endif
+
+#include <Arduino.h>
+#include <esp_task_wdt.h>
+#include <esp_bt.h>        // btStop() 关闭蓝牙控制器 (主控仅用 WiFi AP, 不用蓝牙)
+#include "types.h"          // TurnState_t (跨文件共享类型, 不再靠 include 顺序)
+#include "bsd_protocol.h"
+#include "ms60_radar.h"
+#include "led_control.h"
+#include "config_store.h"
+// 以下三个头定义了 OTA/WiFi/终端链路的类, 全局对象 (otaStatus/server/termLink)
+// 的 extern 声明在这些头里, 实际定义在本文件的全局对象区.
+#include "ota_manager.h"
+#include "wifi_web.h"
+#include "terminal_link.h"
 
 #define WDT_TIMEOUT_S 5
 
@@ -64,24 +70,17 @@
 // 所有 LED 都通过 updateIndicatorLEDs() 集中控制
 
 // ============ 全局对象 ============
+// 所有跨文件共享的全局对象在此统一定义 (头文件里只 extern 声明).
+// 这样消除"头文件定义全局对象导致多 TU 链接冲突"和"include 顺序耦合"两个问题.
 MS60Radar radar(RADAR_UART_NUM, RADAR_RX_PIN, RADAR_TX_PIN, RADAR_BAUD);
 LEDController ledCtrl;
-ConfigStore config;  // 全局配置实例
-// 注: OtaStatus otaStatus 定义在 ota_manager.h (在其 include 之后)
+ConfigStore config;            // 全局配置实例
+AsyncWebServer server(80);     // Web 服务器 (extern 于 wifi_web.h / ota_manager.h / terminal_link.h)
+OtaStatus otaStatus;           // OTA 升级状态 (extern 于 ota_manager.h)
+TerminalLink termLink;         // C3 终端 UART 链路 (extern 于 terminal_link.h)
 
 // ============ 状态变量 ============
-typedef enum {
-    TURN_OFF = 0,
-    TURN_LEFT,
-    TURN_RIGHT
-} TurnState_t;
-
 TurnState_t turn_state = TURN_OFF;
-// 注: ota_manager.h 先于 wifi_web.h 引入, 以便 initWebServer() 内调用 otaRegisterRoutes().
-//     ota_manager.h 仅声明 extern AsyncWebServer server (实际定义在 wifi_web.h).
-#include "ota_manager.h"     // OTA 升级 (主控自更新 + C3 固件转发)
-#include "wifi_web.h"
-#include "terminal_link.h"   // 车把 C3 终端 UART1 链路 (新增, 独立于 WiFi)
 
 unsigned long last_blink_time = 0;
 unsigned long last_bsd_beep_time = 0;

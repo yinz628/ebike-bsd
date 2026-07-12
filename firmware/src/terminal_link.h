@@ -15,6 +15,7 @@
 #include "ms60_radar.h"
 #include "config_store.h"
 #include "term_protocol.h"   // 共享协议: TERM_BAUD (主控↔C3 波特率单一真源)
+#include "types.h"           // TurnState_t (跨文件共享类型)
 
 // ==== 全局变量 extern (定义在 ebike_bsd.ino) ====
 extern MS60Radar radar;
@@ -266,8 +267,8 @@ private:
     }
 };
 
-// 全局实例
-TerminalLink termLink;
+// 全局实例 (定义在 ebike_bsd.ino)
+extern TerminalLink termLink;
 
 inline void terminalLinkInit() { termLink.init(); }
 inline void terminalLinkUpdate() { termLink.update(); }

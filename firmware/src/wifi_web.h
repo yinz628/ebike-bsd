@@ -8,6 +8,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "config_store.h"
+#include "types.h"          // TurnState_t (跨文件共享类型)
 
 // ==== 全局变量 extern ====
 extern MS60Radar radar;
@@ -17,7 +18,7 @@ extern bool rcw_l_active, rcw_r_active;
 extern int buzzer_mode;
 extern int ind_left_mode, ind_right_mode;
 
-AsyncWebServer server(80);
+extern AsyncWebServer server;   // 定义在 ebike_bsd.ino (避免头文件定义全局对象导致多 TU 链接冲突)
 
 // WiFi 发射功率. 默认 20dBm(100mW) 是主控发烫主因之一.
 // 11dBm(约 13mW) 在 1.5-2m 距离连接稳定, 发热显著降低.
