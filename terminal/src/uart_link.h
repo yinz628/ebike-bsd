@@ -40,6 +40,7 @@ struct C3OtaProgress {
     size_t curSeq = 0;      // 当前期望块序号
     int percent = 0;
     String version;         // 主控传来的版本号
+    unsigned long lastChunkMs = 0;   // 最近一次收到数据块的时间 (用于超时检测)
 };
 extern C3OtaProgress c3OtaProgress;
 
@@ -401,6 +402,7 @@ private:
         c3OtaProgress.totalSeq = _ota_total_seq;
         c3OtaProgress.curSeq = 0;
         c3OtaProgress.percent = 0;
+        c3OtaProgress.lastChunkMs = millis();
         otaSendAck("OTAR,ready");
     }
 
@@ -463,6 +465,7 @@ private:
         _ota_expect_seq++;
         c3OtaProgress.curSeq = _ota_expect_seq;
         c3OtaProgress.percent = _ota_total > 0 ? (_ota_expect_seq * 100 / _ota_total_seq) : 0;
+        c3OtaProgress.lastChunkMs = millis();   // 更新最后接收时间
         // ACK 当前块 (主控据此推进)
         otaSendAck(("OTAR," + String(seq)).c_str());
     }

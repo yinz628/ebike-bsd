@@ -164,11 +164,19 @@ void loop() {
 
     // OTA 升级进行中: 全屏显示进度, 跳过正常视图 + 报警音 (避免升级期间 SPI 总线竞争)
     if (c3OtaProgress.active) {
+        // ⚠ 超时保护: 15 秒没收到分块 → 判定中断 → 自动退出 OTA 模式, 恢复正常接收
+        // (主控崩溃/UART 断线等场景, 防止卡死在升级界面永远无法恢复)
+        if (c3OtaProgress.lastChunkMs > 0 && millis() - c3OtaProgress.lastChunkMs > 15000) {
+            Serial.println(F("[OTA] 超时 (15s 无数据), 自动退出升级模式"));
+            c3OtaProgress.active = false;
+            // 继续执行下面的正常视图处理
+        } else {
 #ifdef ENABLE_DISPLAY
-        drawOtaOverlay();
+            drawOtaOverlay();
 #endif
-        delay(100);
-        return;
+            delay(100);
+            return;
+        }
     }
 
 #ifdef ENABLE_DISPLAY
