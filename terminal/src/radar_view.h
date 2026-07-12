@@ -114,6 +114,11 @@ private:
         drawNavBtn(_bg, false);
         drawNavBtn(_bg, true);
 
+        // 固件版本号 (直接画进静态背景, 避过脏检测, 始终可见)
+        _bg.setTextColor(lgfx::color888(139, 148, 158), lgfx::color888(13, 17, 23));
+        _bg.setCursor(_cx - 8, _cy);
+        _bg.print(FW_VERSION);
+
         _bg_ready = true;
         _last_w = w;
         _last_h = h;
@@ -140,9 +145,6 @@ public:
 
         // 1) 一次性推背景 (覆盖旧目标点和旧文字, 无黑屏间隙)
         _bg.pushSprite(&lcd, 0, 0);
-
-        // 1.5) 左上角版本标签 (白色, 始终显示)
-        drawVersionTag(4, 16);
 
         // 2) 画动态目标红点 (直接画在屏幕上, 下一帧会被背景覆盖)
         const float toRad = PI / 180.0f;
@@ -217,12 +219,5 @@ private:
         // 固件版本号 (灰色, 跟在 ONLINE/OFFLINE 后面)
         lcd.setTextColor(lgfx::color888(139, 148, 158), lgfx::color888(22, 27, 34));
         lcd.printf(" " FW_VERSION);
-    }
-
-    // 在雷达图左上角加版本标签 (白色, 更显眼)
-    void drawVersionTag(int x, int y) {
-        lcd.setTextColor(lgfx::color888(255, 255, 255));
-        lcd.setCursor(x, y);
-        lcd.print(FW_VERSION);
     }
 };

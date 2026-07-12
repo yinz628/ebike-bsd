@@ -251,18 +251,15 @@ void loop() {
                 g_wifi_idle_since = millis();   // 开始空闲计时
             }
 
-            if (millis() - g_wifi_idle_since >= 30000) {
-                Serial.println("[WIFI] 30s无连接, 标记关闭 (跳过实际关WiFi, OTA场景需长连接)");
-                // 暂停关闭WiFi操作: 实测发现 WiFi.mode(WIFI_OFF) 在长时UART转发期间可能触发重启.
-                // 且 OTA 场景需要保持热点在线. 空闲时仅打印标志, 不实际关闭.
-                // server.end();
-                // delay(50);
-                // WiFi.softAPdisconnect(true);
-                // WiFi.enableAP(false);
-                // WiFi.mode(WIFI_OFF);
-                // g_wifi_running = false;
-                g_wifi_idle_since = millis(); // 重置计时, 防止连续刷日志
-            }
+	            if (millis() - g_wifi_idle_since >= 30000) {
+	                Serial.println("[WIFI] 30s无连接, 关闭WiFi (OTA转发期间需保持热点, 考虑临时关闭此功能)");
+	                server.end();
+	                delay(50);
+	                WiFi.softAPdisconnect(true);
+	                WiFi.enableAP(false);
+	                WiFi.mode(WIFI_OFF);
+	                g_wifi_running = false;
+	            }
         }
     }
 
