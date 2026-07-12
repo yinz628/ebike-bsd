@@ -141,6 +141,9 @@ public:
         // 1) 一次性推背景 (覆盖旧目标点和旧文字, 无黑屏间隙)
         _bg.pushSprite(&lcd, 0, 0);
 
+        // 1.5) 左上角版本标签 (白色, 始终显示)
+        drawVersionTag(4, 16);
+
         // 2) 画动态目标红点 (直接画在屏幕上, 下一帧会被背景覆盖)
         const float toRad = PI / 180.0f;
         const float base  = PI / 2;
@@ -211,8 +214,15 @@ private:
                          lgfx::color888(22, 27, 34));
         lcd.setCursor(w - 85, y + 3);
         lcd.print(st.online ? "ONLINE" : "OFFLINE");
-        // 固件版本号 (与主控 FW_VERSION 一致, 灰色小字跟在 ONLINE 后面)
+        // 固件版本号 (灰色, 跟在 ONLINE/OFFLINE 后面)
         lcd.setTextColor(lgfx::color888(139, 148, 158), lgfx::color888(22, 27, 34));
         lcd.printf(" " FW_VERSION);
+    }
+
+    // 在雷达图左上角加版本标签 (白色, 更显眼)
+    void drawVersionTag(int x, int y) {
+        lcd.setTextColor(lgfx::color888(255, 255, 255));
+        lcd.setCursor(x, y);
+        lcd.print(FW_VERSION);
     }
 };
