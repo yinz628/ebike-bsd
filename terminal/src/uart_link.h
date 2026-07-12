@@ -19,8 +19,9 @@
 #include <Update.h>
 #include <Preferences.h>
 #include <esp_ota_ops.h>
+#include "term_protocol.h"   // 共享协议: TERM_BAUD / OTA_BLOCK_BYTES / termCrc16
 
-#define TERM_BAUD 115200
+// TERM_BAUD 和 OTA_BLOCK_BYTES 来自共享 term_protocol.h (与主控单一真源)
 
 // ============ OTA 升级 (经 UART1 接收主控转发) ============
 // 协议帧 (与 firmware/src/ota_manager.h 对应):
@@ -30,7 +31,7 @@
 //   C3→主控:  $C,OTAR,ready / $C,OTAR,<seq>     (ACK)
 //             $C,OTAN,<seq>                      (NACK, 重传)
 //             $C,OTAOK / $C,OTAFAIL,<reason>     (结束)
-#define OTA_BLOCK_BYTES 128
+// OTA_BLOCK_BYTES 来自共享 term_protocol.h
 
 // C3 OTA 升级进度 (供屏幕显示 "升级中 NN%")
 struct C3OtaProgress {
@@ -44,17 +45,7 @@ struct C3OtaProgress {
 };
 extern C3OtaProgress c3OtaProgress;
 
-// CRC16-CCITT (与 firmware/src/ota_manager.h otaCrc16 一致)
-inline uint16_t c3OtaCrc16(const uint8_t *data, size_t len) {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= (uint16_t)data[i] << 8;
-        for (int b = 0; b < 8; b++) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
-        }
-    }
-    return crc;
-}
+// CRC16 来自共享 term_protocol.h (termCrc16), 不再本地重复定义
 
 // 是否刚从 OTA 升级启动 (本槽待确认), setup() 末尾调 mark_valid
 inline bool c3OtaIsPendingVerify() {
@@ -431,7 +422,7 @@ private:
         }
 
         // CRC 校验
-        uint16_t crcCalc = c3OtaCrc16(_ota_block, blen);
+        uint16_t crcCalc = termCrc16(_ota_block, blen);
         if (crcCalc != crcRecv) {
             Serial.printf("[OTA] CRC 错误: 收到 %u 计算 %u, NACK 块 %u\n",
                           crcRecv, crcCalc, (unsigned)seq);

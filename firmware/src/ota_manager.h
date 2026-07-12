@@ -28,6 +28,7 @@
 #include <HardwareSerial.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
+#include "term_protocol.h"   // 共享协议: TERM_BAUD / OTA_BLOCK_BYTES / termCrc16
 
 // ==== 外部依赖 (定义在 ebike_bsd.ino / wifi_web.h / terminal_link.h) ====
 extern AsyncWebServer server;
@@ -39,8 +40,8 @@ extern HardwareSerial Serial1;   // UART1 → C3 终端 (terminal_link.h)
 #define OTA_C3_FW_PATH    "/c3fw.bin"
 #define OTA_C3_META_PATH  "/c3meta.txt"   // 记录 size/version, 供状态查询
 
-// C3 转发分块大小 (裸字节数, 编码成 hex 后翻倍)
-#define OTA_BLOCK_BYTES   128
+// OTA_BLOCK_BYTES 来自共享 term_protocol.h (主控与 C3 必须一致)
+// 以下为主控转发状态机独有的超时/重传参数 (C3 端不需要)
 #define OTA_BLOCK_TIMEOUT_MS   1000   // 单块等 ACK 超时
 #define OTA_BEGIN_TIMEOUT_MS   2000   // $OTAB 等 ready 超时
 #define OTA_END_TIMEOUT_MS    15000   // $OTAE 等 OK/FAIL 超时
@@ -170,19 +171,7 @@ inline void otaMarkValid() {
     }
 }
 
-// ============================================================
-//  CRC16-CCITT (用于 UART 转发分块校验, 与 uart_link.h C3 端一致)
-// ============================================================
-inline uint16_t otaCrc16(const uint8_t *data, size_t len) {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= (uint16_t)data[i] << 8;
-        for (int b = 0; b < 8; b++) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
-        }
-    }
-    return crc;
-}
+// CRC16 来自共享 term_protocol.h (termCrc16), 不再本地重复定义
 
 // ============================================================
 //  JSON 字符串转义 (error 等动态内容拼进 JSON 前必须转义, 防 " \破坏结构)
@@ -506,7 +495,7 @@ inline void otaSendChunk(uint32_t seq, const uint8_t *data, size_t len) {
         buf[pos++] = hexchars[data[i] >> 4];
         buf[pos++] = hexchars[data[i] & 0x0F];
     }
-    uint16_t crc = otaCrc16(data, len);
+    uint16_t crc = termCrc16(data, len);
     pos += snprintf(buf + pos, sizeof(buf) - pos, ",%u\n", (unsigned)crc);
     Serial1.write((const uint8_t*)buf, pos);
 }

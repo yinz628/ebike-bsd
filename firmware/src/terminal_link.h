@@ -14,6 +14,7 @@
 #include "bsd_protocol.h"
 #include "ms60_radar.h"
 #include "config_store.h"
+#include "term_protocol.h"   // 共享协议: TERM_BAUD (主控↔C3 波特率单一真源)
 
 // ==== 全局变量 extern (定义在 ebike_bsd.ino) ====
 extern MS60Radar radar;
@@ -40,7 +41,7 @@ extern AsyncWebServer server;
 #define TERM_UART_NUM     1
 #define TERM_TX_PIN       18
 #define TERM_RX_PIN       19
-#define TERM_BAUD         115200
+// TERM_BAUD 来自共享 term_protocol.h (主控↔C3 必须一致)
 
 // 推送周期 (与主循环对齐)
 #define TERM_PUSH_INTERVAL_MS  100   // 10Hz 推送给 C3 (主循环 50ms, 每 2 次推一次)
