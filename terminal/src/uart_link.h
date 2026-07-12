@@ -16,8 +16,57 @@
 // ============================================================
 #pragma once
 #include <Arduino.h>
+#include <Update.h>
+#include <esp_ota_ops.h>
 
 #define TERM_BAUD 115200
+
+// ============ OTA 升级 (经 UART1 接收主控转发) ============
+// 协议帧 (与 firmware/src/ota_manager.h 对应):
+//   主控→C3:  $OTAB,<size>,<version>           (开始)
+//             $OTAC,<seq>,<hex(2*128)>,<crc16>  (分块)
+//             $OTAE                             (结束)
+//   C3→主控:  $C,OTAR,ready / $C,OTAR,<seq>     (ACK)
+//             $C,OTAN,<seq>                      (NACK, 重传)
+//             $C,OTAOK / $C,OTAFAIL,<reason>     (结束)
+#define OTA_BLOCK_BYTES 128
+
+// C3 OTA 升级进度 (供屏幕显示 "升级中 NN%")
+struct C3OtaProgress {
+    bool active = false;
+    size_t total = 0;       // 总字节数
+    size_t totalSeq = 0;    // 总块数
+    size_t curSeq = 0;      // 当前期望块序号
+    int percent = 0;
+    String version;         // 主控传来的版本号
+};
+extern C3OtaProgress c3OtaProgress;
+
+// CRC16-CCITT (与 firmware/src/ota_manager.h otaCrc16 一致)
+inline uint16_t c3OtaCrc16(const uint8_t *data, size_t len) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (int b = 0; b < 8; b++) {
+            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
+        }
+    }
+    return crc;
+}
+
+// 是否刚从 OTA 升级启动 (本槽待确认), setup() 末尾调 mark_valid
+inline bool c3OtaIsPendingVerify() {
+    esp_ota_img_states_t st = ESP_OTA_IMG_UNDEFINED;
+    if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) != ESP_OK) return false;
+    return st == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
+inline void c3OtaMarkValid() {
+    if (c3OtaIsPendingVerify()) {
+        esp_ota_mark_app_valid_cancel_rollback();
+        Serial.println(F("[OTA] 本槽已标记 valid (取消回滚挂起)"));
+    }
+}
 
 // ============ 接收到的状态 (字段与 net_link.h 保持一致, 视图层无需改) ============
 struct TermObj {
@@ -116,9 +165,18 @@ inline bool parseFrame(const String &frame, TerminalState &out) {
 class UartLink {
 private:
     HardwareSerial *_serial;
-    char _rx_buf[300];          // 接收缓冲 (栈分配, 避免 String += 的每字节堆碎片)
+    // 接收缓冲: 容纳 $OTAC 帧 (帧头+128B hex=256字符+帧尾 ≈ 285), 故放大到 320.
+    // 其余 $S/$CFG 帧远小于此.
+    char _rx_buf[320];
     int  _rx_len;               // 缓冲当前长度
     unsigned long _last_rx;
+
+    // ---- OTA 接收状态 ----
+    bool _ota_active = false;
+    size_t _ota_total = 0;
+    size_t _ota_total_seq = 0;
+    size_t _ota_expect_seq = 0;   // 期望收到的下一块序号
+    uint8_t _ota_block[OTA_BLOCK_BYTES];
 
 public:
     TerminalState state;
@@ -183,6 +241,9 @@ public:
                     // 主控回传配置: $CFG,v0,v1,...,v14 (15 个值, 最后一个是 wifi_on)
                     parseCfg(String(p + 5));
                 }
+                else if (strncmp(p, "$OTAB,", 6) == 0) handleOtaBegin(p + 6);
+                else if (strncmp(p, "$OTAC,", 6) == 0) handleOtaChunk(p + 6);
+                else if (strcmp(p, "$OTAE") == 0)      handleOtaEnd();
                 _rx_len = 0;       // 重置缓冲
                 _rx_buf[0] = '\0';
             } else if (c != '\r') {
@@ -257,6 +318,133 @@ private:
             Serial.printf("[UART] got $CFG (%d vals, wifi=%d)\n", n, state.wifi_on);
         }
     }
+
+    // ============ OTA 接收处理 ============
+    void otaSendAck(const char *body) {
+        String f = "$C,"; f += body; f += "\n";
+        _serial->print(f);
+    }
+
+    // hex 字符 → 数值
+    static uint8_t hexVal(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return 0;
+    }
+
+    // $OTAB,<size>,<version>
+    void handleOtaBegin(const char *body) {
+        // body 形如 "393216,V0.2"
+        int comma = -1;
+        for (int i = 0; body[i]; i++) { if (body[i] == ',') { comma = i; break; } }
+        String sizeStr = (comma < 0) ? String(body) : String(body).substring(0, comma);
+        size_t size = (size_t)strtoul(sizeStr.c_str(), nullptr, 10);
+        if (comma >= 0) c3OtaProgress.version = String(body).substring(comma + 1);
+
+        Serial.printf("[OTA] 收到 $OTAB size=%u\n", (unsigned)size);
+        if (!Update.begin(size)) {
+            Serial.println(F("[OTA] ERROR: Update.begin failed"));
+            otaSendAck("OTAFAIL,begin_failed");
+            return;
+        }
+        _ota_active = true;
+        _ota_total = size;
+        _ota_total_seq = (size + OTA_BLOCK_BYTES - 1) / OTA_BLOCK_BYTES;
+        _ota_expect_seq = 0;
+        c3OtaProgress.active = true;
+        c3OtaProgress.total = size;
+        c3OtaProgress.totalSeq = _ota_total_seq;
+        c3OtaProgress.curSeq = 0;
+        c3OtaProgress.percent = 0;
+        otaSendAck("OTAR,ready");
+    }
+
+    // $OTAC,<seq>,<hex>,<crc16>
+    void handleOtaChunk(const char *body) {
+        if (!_ota_active) return;
+        // 解析 seq
+        int p1 = -1, p2 = -1, p3 = -1;
+        for (int i = 0; body[i]; i++) {
+            if (body[i] == ',') {
+                if (p1 < 0) p1 = i;
+                else if (p2 < 0) p2 = i;
+                else if (p3 < 0) p3 = i;
+            }
+        }
+        if (p1 < 0 || p2 < 0 || p3 < 0) {
+            otaSendAck(("OTAN," + String(_ota_expect_seq)).c_str());
+            return;
+        }
+        uint32_t seq = (uint32_t)strtoul(String(body).substring(0, p1).c_str(), nullptr, 10);
+        String hexPart = String(body).substring(p1 + 1, p2);
+        uint16_t crcRecv = (uint16_t)strtoul(String(body).substring(p2 + 1, p3).c_str(), nullptr, 10);
+
+        // 期望序号校验 (乱序/重传 → NACK 要求重发期望块)
+        if (seq != _ota_expect_seq) {
+            Serial.printf("[OTA] 乱序块: 收到 %u 期望 %u, NACK\n",
+                          (unsigned)seq, (unsigned)_ota_expect_seq);
+            otaSendAck(("OTAR," + String(_ota_expect_seq)).c_str());
+            return;
+        }
+
+        // hex 解码
+        size_t hexLen = hexPart.length();
+        if (hexLen % 2 != 0 || hexLen / 2 > OTA_BLOCK_BYTES) {
+            otaSendAck(("OTAN," + String(seq)).c_str());
+            return;
+        }
+        size_t blen = hexLen / 2;
+        for (size_t i = 0; i < blen; i++) {
+            _ota_block[i] = (hexVal(hexPart[i * 2]) << 4) | hexVal(hexPart[i * 2 + 1]);
+        }
+
+        // CRC 校验
+        uint16_t crcCalc = c3OtaCrc16(_ota_block, blen);
+        if (crcCalc != crcRecv) {
+            Serial.printf("[OTA] CRC 错误: 收到 %u 计算 %u, NACK 块 %u\n",
+                          crcRecv, crcCalc, (unsigned)seq);
+            otaSendAck(("OTAN," + String(seq)).c_str());
+            return;
+        }
+
+        // 写入
+        size_t w = Update.write(_ota_block, blen);
+        if (w != blen) {
+            Serial.printf("[OTA] ERROR: write %u != %u\n", (unsigned)w, (unsigned)blen);
+            otaSendAck(("OTAN," + String(seq)).c_str());
+            return;
+        }
+
+        _ota_expect_seq++;
+        c3OtaProgress.curSeq = _ota_expect_seq;
+        c3OtaProgress.percent = _ota_total > 0 ? (_ota_expect_seq * 100 / _ota_total_seq) : 0;
+        // ACK 当前块 (主控据此推进)
+        otaSendAck(("OTAR," + String(seq)).c_str());
+    }
+
+    // $OTAE
+    void handleOtaEnd() {
+        if (!_ota_active) return;
+        Serial.printf("[OTA] 收到 $OTAE, 已写 %u/%u 块, 校验并结束\n",
+                      (unsigned)_ota_expect_seq, (unsigned)_ota_total_seq);
+        if (Update.end(true)) {
+            Serial.println(F("[OTA] 校验通过, 升级成功, 即将重启"));
+            otaSendAck("OTAOK");
+            c3OtaProgress.percent = 100;
+            // 稍延迟让 ACK 发出, 再重启切到新槽
+            delay(500);
+            ESP.restart();
+        } else {
+            Serial.print(F("[OTA] ERROR: Update.end 失败: "));
+            Update.printError(Serial);
+            otaSendAck(("OTAFAIL," + String(Update.getError())).c_str());
+            Update.abort();
+            _ota_active = false;
+            c3OtaProgress.active = false;
+        }
+    }
 };
 
 extern UartLink netLink;   // 沿用 netLink 名, c3_terminal.ino 无需改引用
+C3OtaProgress c3OtaProgress;  // 全局实例 (本头仅被 c3_terminal.ino 包含一次)

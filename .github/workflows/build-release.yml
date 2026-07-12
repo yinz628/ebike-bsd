@@ -1,0 +1,122 @@
+# ============================================================
+#  build-release.yml - OTA 固件自动构建与发布
+#
+#  触发: push tag "v*" (如 v2.8) 或 GitHub Actions 手动运行
+#  产物: gh-pages 分支下的 manifest.json + firmware.bin + c3.bin
+#        (jsDelivr CDN 会缓存, 手机网页通过 cdn.jsdelivr.net 拉取)
+#
+#  手机端"一键升级"流程:
+#    连 eBike-BSD 热点 → 192.168.4.1 → 网页自动 fetch manifest.json →
+#    比对版本 → 一键升级 (走手机蜂窝数据拉 CDN, 再 POST 到 ESP32)
+#
+#  本地手动发布 (不打 tag, 便于调试):
+#    git tag v2.8 && git push origin v2.8
+# ============================================================
+name: Build & Release OTA Firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 V2.8, 不带 v 前缀)'
+        required: true
+        default: 'V2.8'
+      notes:
+        description: '更新说明'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Build main controller firmware
+        working-directory: firmware
+        run: pio run
+
+      - name: Build C3 terminal firmware
+        working-directory: terminal
+        run: pio run
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # tag 触发: v2.8 → V2.8
+            TAG="${GITHUB_REF##*/}"
+            VER="${TAG#v}"
+            echo "version=V${VER}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stage artifacts + compute sha256
+        run: |
+          mkdir -p staging
+          cp firmware/.pio/build/esp32dev/firmware.bin staging/firmware.bin
+          cp terminal/.pio/build/esp32-c3-devkitm-1/firmware.bin staging/c3.bin
+          cd staging
+          MAIN_SHA=$(sha256sum firmware.bin | awk '{print $1}')
+          C3_SHA=$(sha256sum c3.bin | awk '{print $1}')
+          MAIN_SIZE=$(stat -c%s firmware.bin)
+          C3_SIZE=$(stat -c%s c3.bin)
+          echo "main_sha=$MAIN_SHA" >> $GITHUB_ENV
+          echo "c3_sha=$C3_SHA" >> $GITHUB_ENV
+          echo "main_size=$MAIN_SIZE" >> $GITHUB_ENV
+          echo "c3_size=$C3_SIZE" >> $GITHUB_ENV
+
+      - name: Generate manifest.json
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NOTES: ${{ github.event.inputs.notes }}
+          MAIN_SHA: ${{ env.main_sha }}
+          C3_SHA: ${{ env.c3_sha }}
+          MAIN_SIZE: ${{ env.main_size }}
+          C3_SIZE: ${{ env.c3_size }}
+        run: |
+          python3 - <<'PY'
+          import json, os, datetime
+          notes = os.environ.get("NOTES") or "固件升级"
+          manifest = {
+              "version": os.environ["VERSION"],
+              "date": datetime.date.today().isoformat(),
+              "main_fw": "firmware.bin",
+              "main_sha256": os.environ["MAIN_SHA"],
+              "main_size": int(os.environ["MAIN_SIZE"]),
+              "c3_fw": "c3.bin",
+              "c3_sha256": os.environ["C3_SHA"],
+              "c3_size": int(os.environ["C3_SIZE"]),
+              "notes": notes,
+          }
+          with open("staging/manifest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          print("=== manifest.json ===")
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Deploy to gh-pages (jsDelivr CDN 源)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: staging
+          publish_branch: gh-pages
+          keep_files: false
+          force_orphan: true
+          commit_message: "OTA release ${{ steps.ver.outputs.version }}"

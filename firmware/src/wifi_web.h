@@ -52,6 +52,7 @@ void handleStatus(AsyncWebServerRequest *req) {
     s["rcw_l"]=rcw_l_active; s["rcw_r"]=rcw_r_active;
     s["buzzer"]=buzzer_mode; s["ind_left"]=ind_left_mode; s["ind_right"]=ind_right_mode;
     s["uptime"]=millis()/1000;
+    s["fw_version"]=FW_VERSION;   // 供网页"一键升级"比对云端 manifest 用
     String json; serializeJson(doc, json);
     req->send(200, "application/json", json);
 }
@@ -109,7 +110,7 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:16px 0}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 </style></head>
 <body>
-<h1>eBike <span>BSD</span> V2.7 <small style="color:var(--ok);font-size:10px">CANVAS</small></h1>
+<h1>eBike <span>BSD</span> __FWV__ <small style="color:var(--ok);font-size:10px">CANVAS</small></h1>
 <div class="sub">热点: eBike-BSD | 192.168.4.1 | <span id="load-status" style="color:var(--warn)">加载中...</span></div>
 
 <div class="card">
@@ -158,10 +159,29 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:16px 0}
  <div class="row"><label>后方蜂鸣</label><select id="s_buzz" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:90px"><option value="1">开启</option><option value="0">关闭</option></select><span class="unit">RCW后方监测蜂鸣 (转向辅助不受此控制)</span></div>
 </div>
 
+<div class="card"><h2>⬆️ 固件升级</h2>
+ <div style="font-size:11px;color:var(--muted);margin-bottom:6px">当前主控: <b id="ota-cur-ver" style="color:var(--text)">?</b> (槽 <span id="ota-slot">?</span>)</div>
+ <div id="ota-cloud" style="font-size:11px;margin-bottom:8px;padding:6px;border-radius:6px;background:var(--bg);border:1px solid var(--border)">云端检查中…</div>
+ <button id="ota-up-main" class="btn" style="background:var(--ok);color:#fff;display:none" onclick="otaOneClickMain()">🚀 一键升级主控</button>
+ <button id="ota-up-c3" class="btn" style="background:var(--ok);color:#fff;display:none;margin-top:4px" onclick="otaOneClickC3()">📱 一键升级车把终端</button>
+ <div id="ota-prog" style="display:none;margin:6px 0"><div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden"><div id="ota-prog-bar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div><div id="ota-prog-txt" style="font-size:10px;color:var(--muted);margin-top:2px">0%</div></div>
+ <details style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+  <summary style="font-size:11px;color:var(--muted);cursor:pointer">手动上传 (离线/降级兜底)</summary>
+  <div style="margin-top:8px;font-size:11px;color:var(--muted)">主控 firmware.bin:</div>
+  <input type="file" id="ota-file-main" accept=".bin" style="font-size:10px;margin:4px 0;width:100%">
+  <button class="btn" style="background:var(--accent);color:#fff;padding:8px" onclick="otaUploadFile('main')">上传到主控</button>
+  <div style="margin-top:8px;font-size:11px;color:var(--muted)">车把终端 c3.bin (经主控转发):</div>
+  <input type="file" id="ota-file-c3" accept=".bin" style="font-size:10px;margin:4px 0;width:100%">
+  <button class="btn" style="background:var(--accent);color:#fff;padding:8px" onclick="otaUploadFile('c3')">暂存并转发到终端</button>
+  <button id="ota-c3-retry" class="btn" style="background:var(--warn);color:#000;padding:8px;margin-top:4px;display:none" onclick="otaC3Retry()">重试转发终端</button>
+ </details>
+ <div style="font-size:10px;color:var(--muted);margin-top:6px">⚠️ 升级期间不要断电。主控升级后会自动重启;失败自动回滚旧版。</div>
+</div>
+
 <button class="btn btn-save" onclick="save()">💾 保存当前配置</button>
 <button class="btn btn-reset" onclick="resetCfg()">🔄 恢复出厂默认</button>
 <div class="toast" id="toast"></div>
-<footer>eBike BSD V2.7 · ESP32 MS60-3015</footer>
+<footer>eBike BSD __FWV__ · ESP32 MS60-3015</footer>
 
 <script>
 function q(s){return document.querySelector(s)}
@@ -283,6 +303,145 @@ async function wifiOff(){
   toast(r.ok?'WiFi已关闭, 下次开机自动重开':'关闭失败',!r.ok);
  }catch(e){toast('网络错误',true)}
 }
+
+// ============ OTA 升级 ============
+// jsDelivr CDN 拉取云端 manifest (走手机蜂窝/WiFi, 不经 ESP32).
+// 仓库: github.com/yinz628/ebike-bsd; manifest.json 由 GitHub Action 推到 gh-pages 分支.
+var OTA_MANIFEST_URL='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@gh-pages/manifest.json';
+var OTA_FW_BASE='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@gh-pages/';
+var otaCurVer='?',otaManifest=null;
+
+function otaSetProg(p,msg){var b=q('#ota-prog-bar'),t=q('#ota-prog-txt');q('#ota-prog').style.display='block';b.style.width=Math.round(p)+'%';t.textContent=(msg||'')+Math.round(p)+'%'}
+
+async function otaLoadCurrent(){
+ try{
+  var r=await fetch('/api/ota_status'),j=await r.json(),m=j.main||{};
+  otaCurVer=m.version||'?';
+  q('#ota-cur-ver').textContent=otaCurVer;
+  q('#ota-slot').textContent=m.slot||'?';
+ }catch(e){q('#ota-cur-ver').textContent='(查询失败)'}
+}
+
+async function otaCloudCheck(){
+ var el=q('#ota-cloud');
+ el.textContent='检查云端新版本…';el.style.color='var(--muted)';
+ try{
+  // 5s 超时, 失败=手机当前无外网 (AP 无网且无多接口)
+  var r=await Promise.race([fetch(OTA_MANIFEST_URL,{cache:'no-store'}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'))},5000)})]);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  var j=await r.json();otaManifest=j;
+  el.innerHTML='云端最新: <b style="color:var(--accent)">'+j.version+'</b>';
+  if(j.notes){el.innerHTML+='<div style="margin-top:4px;color:var(--muted);font-size:10px">'+j.notes+'</div>'}
+  // 比对版本 (简单字符串比较; 同版本不显示升级按钮)
+  var hasNew=(j.version&&j.version!==otaCurVer);
+  q('#ota-up-main').style.display=hasNew?'block':'none';
+  q('#ota-up-c3').style.display=(j.c3_fw&&hasNew)?'block':'none';
+  if(!hasNew){el.innerHTML+=' <span style="color:var(--ok)">已是最新</span>'}
+ }catch(e){
+  el.innerHTML='⚠️ 无法连接云端 ('+e.message+')。<br>请用下方"手动上传": 先用电脑/手机在有网环境下载 .bin, 再切到本热点上传。';
+  el.style.color='var(--warn)';
+ }
+}
+
+// 一键升级主控: 从 CDN 拉 .bin → POST ArrayBuffer 到 /api/ota_main
+async function otaOneClickMain(){
+ if(!otaManifest||!otaManifest.main_fw){toast('无云端固件信息',true);return}
+ if(!confirm('一键升级主控到 '+otaManifest.version+'?\n升级期间不要断电,完成后自动重启。'))return;
+ var url=OTA_FW_BASE+otaManifest.main_fw;
+ q('#ota-up-main').disabled=true;q('#ota-up-main').textContent='下载中…';
+ otaSetProg(0,'下载主控固件 ');
+ try{
+  var r=await fetch(url);
+  if(!r.ok)throw new Error('下载失败 HTTP '+r.status);
+  var buf=await r.arrayBuffer();
+  // 上传到 ESP32
+  otaSetProg(0,'上传到主控 ');
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/ota_main',true);
+  xhr.upload.onprogress=function(ev){if(ev.lengthComputable){var p=ev.loaded/ev.total*100;otaSetProg(p,'上传到主控 ')}};
+  xhr.onload=function(){
+   if(xhr.status===200){toast('上传成功, 主控重启中…');otaWaitReboot()}
+   else{toast('升级失败: '+xhr.responseText,true);q('#ota-up-main').disabled=false;q('#ota-up-main').textContent='🚀 一键升级主控';q('#ota-prog').style.display='none'}
+  };
+  xhr.onerror=function(){toast('网络错误',true);q('#ota-up-main').disabled=false;q('#ota-up-main').textContent='🚀 一键升级主控'};
+  xhr.send(buf);
+ }catch(e){toast('下载失败: '+e.message,true);q('#ota-up-main').disabled=false;q('#ota-up-main').textContent='🚀 一键升级主控'}
+}
+
+// 一键升级终端: 拉 c3.bin → 暂存到主控 SPIFFS → 主控自动转发
+async function otaOneClickC3(){
+ if(!otaManifest||!otaManifest.c3_fw){toast('无终端固件信息',true);return}
+ if(!confirm('一键升级车把终端到 '+otaManifest.version+'?\n固件会先暂存到主控, 再经 UART 转发到终端 (约1-2分钟)。'))return;
+ var url=OTA_FW_BASE+otaManifest.c3_fw;
+ q('#ota-up-c3').disabled=true;q('#ota-up-c3').textContent='下载中…';
+ otaSetProg(0,'下载终端固件 ');
+ try{
+  var r=await fetch(url);
+  if(!r.ok)throw new Error('下载失败 HTTP '+r.status);
+  var buf=await r.arrayBuffer();
+  otaSetProg(0,'暂存到主控 ');
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/ota_c3',true);
+  xhr.upload.onprogress=function(ev){if(ev.lengthComputable){var p=ev.loaded/ev.total*100;otaSetProg(p,'暂存到主控 ')}};
+  xhr.onload=function(){
+   if(xhr.status===200){toast('已暂存, 正在转发到终端…');otaPollC3Relay()}
+   else{toast('暂存失败: '+xhr.responseText,true);q('#ota-up-c3').disabled=false;q('#ota-up-c3').textContent='📱 一键升级车把终端'}
+  };
+  xhr.onerror=function(){toast('网络错误',true);q('#ota-up-c3').disabled=false;q('#ota-up-c3').textContent='📱 一键升级车把终端'};
+  xhr.send(buf);
+ }catch(e){toast('下载失败: '+e.message,true);q('#ota-up-c3').disabled=false;q('#ota-up-c3').textContent='📱 一键升级车把终端'}
+}
+
+// 手动上传 (离线兜底)
+function otaUploadFile(kind){
+ var inp=q('#ota-file-'+kind),f=inp.files[0];
+ if(!f){toast('请先选择 .bin 文件',true);return}
+ if(!confirm('上传 '+f.name+' ('+f.size+' bytes) 到'+(kind==='main'?'主控(并重启)':'主控暂存并转发终端')+'?'))return;
+ otaSetProg(0,kind==='main'?'上传到主控 ':'暂存到主控 ');
+ var xhr=new XMLHttpRequest();
+ xhr.open('POST',kind==='main'?'/api/ota_main':'/api/ota_c3',true);
+ xhr.upload.onprogress=function(ev){if(ev.lengthComputable){var p=ev.loaded/ev.total*100;otaSetProg(p,kind==='main'?'上传到主控 ':'暂存到主控 ')}};
+ xhr.onload=function(){
+  if(xhr.status===200){
+   if(kind==='main'){toast('上传成功, 主控重启中…');otaWaitReboot()}
+   else{toast('已暂存, 正在转发到终端…');otaPollC3Relay()}
+  }else{toast('失败: '+xhr.responseText,true);q('#ota-prog').style.display='none'}
+ };
+ xhr.onerror=function(){toast('网络错误',true)};
+ xhr.send(f);
+}
+
+function otaC3Retry(){
+ fetch('/api/ota_c3_retry',{method:'POST'}).then(function(){toast('重试中…');otaPollC3Relay()}).catch(function(){toast('网络错误',true)});
+}
+
+// 主控重启后轮询等设备回来
+function otaWaitReboot(){
+ var n=0;
+ var iv=setInterval(function(){
+  n++;
+  fetch('/api/ota_status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(){
+   if(n>2){clearInterval(iv);toast('主控已重启回来 ✓');setTimeout(function(){location.reload()},1000)}
+  }).catch(function(){/* 还在重启, 继续 */});
+  if(n>40){clearInterval(iv);toast('等待超时, 请手动刷新',true)}
+ },1000);
+}
+
+// 轮询 C3 转发进度
+function otaPollC3Relay(){
+ q('#ota-up-c3').textContent='转发中…';
+ var iv=setInterval(function(){
+  fetch('/api/ota_status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+   var c=j.c3||{};
+   if(c.state==='relaying'&&c.total>0){otaSetProg(c.seq/c.total*100,'转发到终端 '+c.seq+'/'+c.total+' ')}
+   else if(c.state==='success'){clearInterval(iv);otaSetProg(100,'完成 ');toast('终端升级成功 ✓');setTimeout(function(){location.reload()},2000)}
+   else if(c.state==='failed'){clearInterval(iv);toast('终端升级失败: '+(c.error||''),true);q('#ota-c3-retry').style.display='block';q('#ota-prog').style.display='none'}
+  }).catch(function(){});
+ },1000);
+}
+
+// 启动: 加载当前版本 + 检查云端
+otaLoadCurrent();otaCloudCheck();
 loadCfg().then(function(){setInterval(poll,800);poll()});
 </script></body></html>
 )rawliteral";
@@ -290,7 +449,10 @@ loadCfg().then(function(){setInterval(poll,800);poll()});
 void initWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *req){
         Serial.println("[WEB] PAGE served");
-        req->send(200, "text/html", INDEX_HTML);
+        // 把模板占位符替换为当前固件版本, 单一真源 (FW_VERSION), 避免硬编码分歧
+        String html = String(FPSTR(INDEX_HTML));
+        html.replace(F("__FWV__"), FW_VERSION);
+        req->send(200, "text/html", html);
     });
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/config", HTTP_OPTIONS, [](AsyncWebServerRequest *req){
@@ -336,6 +498,10 @@ void initWebServer() {
     
     server.on("/api/config", HTTP_GET, handleConfigGet);
     server.on("/api/reset", HTTP_POST, handleFactoryReset);
+
+    // OTA 路由 (主控上传 / C3 暂存 / 状态查询 / C3 重试)
+    otaRegisterRoutes();
+
     server.begin();
     Serial.println("[WEB] Server started on port 80");
 }

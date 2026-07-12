@@ -1,0 +1,24 @@
+# Name,   Type, SubType, Offset,  Size,    Flags
+# ============================================================
+#  partitions_ota_8M.csv - 支持 OTA 升级的 8MB 分区表
+#  在 partitions_factory_8M.csv 基础上, 把单 factory 分区拆为 A/B 双 OTA 槽.
+#
+#  保留:
+#    - nvs (0x9000): 非易失配置
+#    - phy_init (0xf000): RF 校准 (缺它会 WiFi 初始化 panic)
+#  新增:
+#    - otadata (0x10000): OTA 槽选择 (bootloader 据此判断下次启动哪个槽)
+#    - ota_0 (0x20000) / ota_1 (0x210000): A/B 双槽, 各 ~1.94MB
+#
+#  app 起始地址从原 0x10000 改到 0x20000 (为 otadata 让出 0x10000~0x20000).
+#  合计 ~5.88MB < 8MB, 余量充足 (C3 固件当前仅 ~393KB).
+#
+#  ⚠ 切换到此分区表是一次性破坏性操作:
+#    需用 esptool 重新烧 bootloader + 分区表 + 固件 (见 platformio.ini 注释).
+#    后续 OTA 升级永不动 bootloader, 仅替换 ota_0/ota_1 内容, 零风险.
+# ============================================================
+nvs,      data, nvs,    0x9000,  0x6000,
+phy_init, data, phy,    0xf000,  0x1000,
+otadata,  data, ota,    0x10000, 0x2000,
+ota_0,    app,  ota_0,  0x20000, 0x1F0000,
+ota_1,    app,  ota_1,  0x210000,0x1F0000,

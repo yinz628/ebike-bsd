@@ -14,6 +14,12 @@
 #include "lgfx_config.hpp"
 #include "uart_link.h"
 
+// ============ 固件版本 (单一真源) ============
+// platformio.ini -D APP_VERSION 同步写入 esp_app_desc_t, 供 OTA 比对.
+#ifndef FW_VERSION
+#define FW_VERSION "V0.2"
+#endif
+
 // 全局对象
 LGFX lcd;
 UartLink netLink;
@@ -99,7 +105,7 @@ void updatePages() {
 void setup() {
     Serial.begin(115200);
     delay(3000);  // ⚠ USB 供电需 3s 延迟让电源稳定, 否则 LovyanGFX + 背光初始化时掉电重启
-    Serial.println("\n=== ebike-bsd C3 终端 V0.1 ===");
+    Serial.println("\n=== ebike-bsd C3 终端 " FW_VERSION " ===");
     Serial.println("Hardware: 立创实战派 ESP32-C3");
 
     // UART 链路 (接主控) — P1 阶段核心, 必须先于屏幕验证
@@ -138,6 +144,10 @@ void setup() {
 
     updatePages();
     Serial.printf("[INIT] 页面数: %d\n", totalPages);
+
+    // OTA 回滚保护: 若本槽是 OTA 升级后首次启动且系统已就绪, 标记 valid 取消回滚挂起.
+    // (若新固件在此前 panic, bootloader 下次重启自动回滚到上一好槽)
+    c3OtaMarkValid();
 }
 
 // ============ LOOP ============
@@ -145,8 +155,17 @@ void setup() {
 // #define TOUCH_DEBUG
 
 void loop() {
-    // 1. 读 UART, 更新 netLink.state
+    // 1. 读 UART, 更新 netLink.state (含 OTA 帧接收)
     netLink.update();
+
+    // OTA 升级进行中: 全屏显示进度, 跳过正常视图 + 报警音 (避免升级期间 SPI 总线竞争)
+    if (c3OtaProgress.active) {
+#ifdef ENABLE_DISPLAY
+        drawOtaOverlay();
+#endif
+        delay(100);
+        return;
+    }
 
 #ifdef ENABLE_DISPLAY
     // 2. 触摸处理 (切页 / 配置页调参)
@@ -193,7 +212,46 @@ void loop() {
     delay(66);   // ~15fps 刷新 (主控 $S 推送 10Hz, 无需更快; 减少 SPI 总线占用防撕裂)
 }
 
-// ============ 触摸处理 ============
+// ============ OTA 升级进度覆盖层 ============
+#ifdef ENABLE_DISPLAY
+// 适配: lgfx 无 mute 便捷色, 返回暗灰 (与各 view 的 MUTE_COLOR 风格一致)
+inline uint16_t lgxcolor888_mute() { return lgfx::color888(139, 148, 158); }
+
+void drawOtaOverlay() {
+    static int lastPct = -1;
+    int pct = c3OtaProgress.percent;
+    // 仅在百分比变化时重绘 (减少 SPI 刷新, 节省带宽 + 防撕裂)
+    if (pct == lastPct) return;
+    lastPct = pct;
+
+    lcd.startWrite();
+    lcd.fillScreen(lgfx::color888(13, 17, 23));   // 与 Web UI 一致的深色底
+    lcd.setTextColor(lgfx::color888(88, 166, 255));
+    lcd.setTextSize(2);
+    lcd.setTextDatum(textdatum_t::top_center);
+    lcd.drawString("固件升级中", lcd.width() / 2, 50);
+
+    lcd.setTextColor(lgfx::color888(201, 209, 217));
+    lcd.setTextSize(1);
+    lcd.drawString(String("目标: ") + c3OtaProgress.version, lcd.width() / 2, 90);
+    lcd.drawString(String(c3OtaProgress.curSeq) + " / " + c3OtaProgress.totalSeq + " 块",
+                   lcd.width() / 2, 110);
+
+    // 进度条
+    int barW = lcd.width() - 60, barH = 16;
+    int barX = 30, barY = 150;
+    lcd.drawRect(barX, barY, barW, barH, lgfx::color888(48, 54, 61));
+    int fillW = (barW - 2) * pct / 100;
+    lcd.fillRect(barX + 1, barY + 1, fillW, barH - 2, lgfx::color888(88, 166, 255));
+    lcd.setTextColor(lgfx::color888(63, 185, 80));
+    lcd.setTextDatum(textdatum_t::top_center);
+    lcd.drawString(String(pct) + "%", lcd.width() / 2, barY + barH + 8);
+
+    lcd.setTextColor(lgxcolor888_mute());
+    lcd.drawString("升级期间不要断电", lcd.width() / 2, lcd.height() - 24);
+    lcd.endWrite();
+}
+#endif
 // 切页后调用, 强制新页面重绘 + 配置页触发主控查询
 void markCurrentDirty() {
 #ifdef ENABLE_RADAR_VIEW

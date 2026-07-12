@@ -70,6 +70,28 @@ private:
             return;
         }
 
+        // ============ OTA 回复 (C3 → 主控) ============
+        // 帧格式: $C,OTAR,ready / $C,OTAR,<seq> / $C,OTAN,<seq> / $C,OTAOK / $C,OTAFAIL,<reason>
+        // 分发到 ota_manager.h 的转发状态机 (otaRelayCtx).
+        if (cmd == "OTAR,ready") { otaRelayOnC3Ready(); return; }
+        if (cmd == "OTAOK")      { otaRelayOnOk(); return; }
+        if (cmd.startsWith("OTAR,")) {
+            // OTAR,<seq> — ACK 当前块
+            long seq = cmd.substring(5).toInt();
+            otaRelayOnAck((uint32_t)seq);
+            return;
+        }
+        if (cmd.startsWith("OTAN,")) {
+            // OTAN,<seq> — NACK, 重传
+            long seq = cmd.substring(5).toInt();
+            otaRelayOnNack((uint32_t)seq);
+            return;
+        }
+        if (cmd.startsWith("OTAFAIL,")) {
+            otaRelayOnFail(cmd.substring(8));
+            return;
+        }
+
         // 查询配置: C3 发 $C,GETCFG → 主控回 $CFG,15个值\n (整包回传)
         if (cmd == "GETCFG") {
             char buf[200];

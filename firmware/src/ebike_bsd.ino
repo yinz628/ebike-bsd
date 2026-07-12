@@ -1,7 +1,7 @@
 // ============================================================
 //  ebike_bsd.ino - 电动自行车进阶转向灯系统 主程序
 //  硬件: ESP32 + MS60-3015 60GHz雷达 ×1 + IRLZ44N MOSFET ×4
-//  版本: V2.7 — WiFi控制台 + JSON配置 + LED闪烁分级 + 目标自动消失 + StaticJsonDocument修复
+//  版本: V2.8 — OTA升级 + WiFi控制台 + JSON配置 + LED闪烁分级 + 目标自动消失 + StaticJsonDocument修复
 // ============================================================
 
 #include <Arduino.h>
@@ -11,6 +11,13 @@
 #include "config_store.h"
 #include <esp_task_wdt.h>
 #include <esp_bt.h>        // btStop() 关闭蓝牙控制器 (主控仅用 WiFi AP, 不用蓝牙)
+
+// ============ 固件版本 (单一真源) ============
+// 所有展示点 (启动横幅/Web/OLED/终端) 统一引用此宏, 避免多处分歧.
+// platformio.ini 的 -D APP_VERSION 同步写入 esp_app_desc_t 供 OTA/esptool 读取.
+#ifndef FW_VERSION
+#define FW_VERSION "V2.8"
+#endif
 
 #define WDT_TIMEOUT_S 5
 
@@ -61,6 +68,7 @@
 MS60Radar radar(RADAR_UART_NUM, RADAR_RX_PIN, RADAR_TX_PIN, RADAR_BAUD);
 LEDController ledCtrl;
 ConfigStore config;  // 全局配置实例
+// 注: OtaStatus otaStatus 定义在 ota_manager.h (在其 include 之后)
 
 // ============ 状态变量 ============
 typedef enum {
@@ -70,6 +78,9 @@ typedef enum {
 } TurnState_t;
 
 TurnState_t turn_state = TURN_OFF;
+// 注: ota_manager.h 先于 wifi_web.h 引入, 以便 initWebServer() 内调用 otaRegisterRoutes().
+//     ota_manager.h 仅声明 extern AsyncWebServer server (实际定义在 wifi_web.h).
+#include "ota_manager.h"     // OTA 升级 (主控自更新 + C3 固件转发)
 #include "wifi_web.h"
 #include "terminal_link.h"   // 车把 C3 终端 UART1 链路 (新增, 独立于 WiFi)
 
@@ -124,7 +135,7 @@ void setup() {
     Serial.begin(SERIAL_DEBUG_BAUD);
     Serial.setTimeout(50);   // readStringUntil 最多阻塞 50ms (默认 1000ms 会卡住 loop)
     Serial.println();
-    Serial.println("=== e-Bike BSD Turn Signal System (V2.7) ===");
+    Serial.println("=== e-Bike BSD Turn Signal System (" FW_VERSION ") ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
 
     // 加载配置
@@ -145,6 +156,13 @@ void setup() {
     Serial.println("[WIFI] 启动热点 (30秒无人连自动关)...");
     initWiFi();
     initWebServer();
+
+    // SPIFFS: 用于 OTA 时暂存 C3 终端固件 (spiffs 分区 ~1.375MB, 之前空闲)
+    if (SPIFFS.begin(true)) {
+        Serial.println("[SPIFFS] 挂载成功 (OTA C3 暂存区)");
+    } else {
+        Serial.println("[SPIFFS] ⚠ 挂载失败, C3 OTA 不可用 (主控 OTA 仍可用)");
+    }
 
     setupPins();
 
@@ -171,6 +189,11 @@ void setup() {
 
     // C3 车把终端 UART 链路 (可选, 无 C3 时静默)
     terminalLinkInit();
+
+    // OTA 回滚保护: 若本槽是 OTA 升级后首次启动, 且系统已初始化完成 (雷达+Web+终端),
+    // 则标记本槽 valid, 取消 bootloader 的回滚挂起.
+    // (若新固件在这里之前 panic, bootloader 会在下次重启自动回滚到上一好槽)
+    otaMarkValid();
 }
 
 // ===============================================================
@@ -328,6 +351,10 @@ void loop() {
 
     // 7.5) 车把 C3 终端链路 (推送状态 + 接收触摸命令)
     terminalLinkUpdate();
+
+    // 7.6) OTA: 主控上传成功后延迟重启 + C3 固件 UART 转发状态机
+    otaMainLoopTick();
+    otaRelayStep();
 
     // 8) 调试输出 (每2秒, 仅在编译开关 ENABLE_DEBUG_LOG 开启时输出)
     //    日常运行关闭以减少串口/USB 开销; 调试时在 platformio.ini 定义该宏
