@@ -9,11 +9,12 @@
 #pragma once
 #include "lgfx_config.hpp"
 #include "uart_link.h"
+#include "base_view.h"
 
 extern LGFX lcd;
 extern UartLink netLink;
 
-class ConfigView {
+class ConfigView : public BaseView {
 private:
     struct Param {
         const char *key;
@@ -83,16 +84,16 @@ private:
     }
 
 public:
-    void markDirty() { _needsDraw = true; }
+    void markDirty() override { _needsDraw = true; }
 
     // 切到本页 / 切 tab 时调用: 同步主控配置 + 进入 SYS 时查询 WiFi
-    void onEnter(const TerminalState &st) {
+    void onEnter(const TerminalState &st) override {
         syncFromMaster(st);
         if (tab == 0) netLink.requestConfig();   // SYS tab (首页) 需要最新 WiFi 状态
         _needsDraw = true;
     }
 
-    void draw(const TerminalState &st) {
+    void draw(const TerminalState &st) override {
         // REFRESH 反馈: 2 秒后需要清除文字, 触发一次重绘 (不持续重绘, 避免闪屏)
         if (refreshMsg && millis() - refreshMsg >= 2000) {
             refreshMsg = 0;
@@ -208,7 +209,7 @@ public:
         lcd.endWrite();
     }
 
-    bool handleTouch(int tx, int ty) {
+    bool handleTouch(int tx, int ty) override {
         int n = tabCount[tab];
 
         // 底部按钮优先判断 (用常量, 与绘制区一致)

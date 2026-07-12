@@ -53,47 +53,27 @@ bool readTouch(int *x, int *y) {
     return true;
 }
 
-// 分阶段开关 (开发时按需注释, 验证完逐个打开)
-#define ENABLE_DISPLAY        // P1: 屏幕初始化
-#define ENABLE_RADAR_VIEW     // P2: 雷达扇形图
-#define ENABLE_STATUS_VIEW    // P3: 状态页
-#define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
-#define ENABLE_ALERT_SOUND    // P4: ES8311 报警音 (功放默认关闭, 播放时才使能)
+// 屏幕开关 (屏幕故障时可注释掉, 跳过显示初始化)
+#define ENABLE_DISPLAY
 
-#ifdef ENABLE_RADAR_VIEW
 #include "radar_view.h"
-RadarView radarView;
-#endif
-
-#ifdef ENABLE_STATUS_VIEW
 #include "status_view.h"
-StatusView statusView;
-#endif
-
-#ifdef ENABLE_CONFIG_VIEW
 #include "config_view.h"
-ConfigView configView;
-#endif
-
-#ifdef ENABLE_ALERT_SOUND
 #include "alert_sound.h"
+
+RadarView radarView;
+StatusView statusView;
+ConfigView configView;
 AlertSound alertSound;
-#endif
+
+// ============ 视图分发表 (数组替 switch, 加页面只需加一行) ============
+// 所有视图继承 BaseView, 通过虚函数统一调用 draw/markDirty/onEnter/handleTouch.
+BaseView* pages[] = { &radarView, &statusView, &configView };
+const int totalPages = sizeof(pages) / sizeof(pages[0]);
 
 // ============ 触摸/切页状态 ============
 int currentPage = 0;        // 0=雷达图 1=状态 2=配置
-int totalPages   = 1;        // 随分阶段开关增加
 int lastTouchX = -1, lastTouchY = -1;
-
-void updatePages() {
-    totalPages = 1;
-#ifdef ENABLE_STATUS_VIEW
-    totalPages++;
-#endif
-#ifdef ENABLE_CONFIG_VIEW
-    totalPages++;
-#endif
-}
 
 // ============ SETUP ============
 void setup() {
@@ -130,11 +110,8 @@ void setup() {
 #endif
 
     // ES8311 报警音 (I2C 总线需在 lcd.init 之后, 共用 SDA=0/SCL=1)
-#ifdef ENABLE_ALERT_SOUND
     alertSound.init();
-#endif
 
-    updatePages();
     Serial.printf("[INIT] 页面数: %d\n", totalPages);
 
     // OTA 回滚保护: 若本槽是 OTA 升级后首次启动且系统已就绪, 标记 valid 取消回滚挂起.
@@ -171,32 +148,12 @@ void loop() {
     // 2. 触摸处理 (切页 / 配置页调参)
     handleTouch();
 
-#ifndef TOUCH_DEBUG
-    // 3. 按当前页绘制
-    switch (currentPage) {
-        case 0:
-#ifdef ENABLE_RADAR_VIEW
-            radarView.draw(netLink.state);
-#endif
-            break;
-        case 1:
-#ifdef ENABLE_STATUS_VIEW
-            statusView.draw(netLink.state);
-#endif
-            break;
-        case 2:
-#ifdef ENABLE_CONFIG_VIEW
-            configView.draw(netLink.state);
-#endif
-            break;
-    }
-#endif
+    // 3. 按当前页绘制 (虚函数分发, 替 switch+ifdef)
+    pages[currentPage]->draw(netLink.state);
 #endif
 
     // 4. 报警音同步
-#ifdef ENABLE_ALERT_SOUND
     alertSound.update(netLink.state.bz_mode);
-#endif
 
     delay(66);   // ~15fps 刷新 (主控 $S 推送 10Hz, 无需更快; 减少 SPI 总线占用防撕裂)
 }
@@ -241,17 +198,11 @@ void drawOtaOverlay() {
     lcd.endWrite();
 }
 #endif
-// 切页后调用, 强制新页面重绘 + 配置页触发主控查询
+
+// 切页后调用, 强制新页面重绘 (虚函数分发; ConfigView 的 onEnter 会触发主控查询)
 void markCurrentDirty() {
-#ifdef ENABLE_RADAR_VIEW
-    if (currentPage == 0) radarView.markDirty();
-#endif
-#ifdef ENABLE_STATUS_VIEW
-    if (currentPage == 1) statusView.markDirty();
-#endif
-#ifdef ENABLE_CONFIG_VIEW
-    if (currentPage == 2) configView.onEnter(netLink.state);
-#endif
+    pages[currentPage]->markDirty();
+    pages[currentPage]->onEnter(netLink.state);
 }
 
 // 翻页按钮命中检测 (⚠ NAV_BTN_W/H 定义在 lgfx_config.hpp, 与各 view 一致)
@@ -303,11 +254,10 @@ void handleTouch() {
         Serial.printf("[TOUCH] page -> %d\n", currentPage);
         markCurrentDirty();
     }
-#ifdef ENABLE_CONFIG_VIEW
-    else if (currentPage == 2) {
-        handled = configView.handleTouch(tx, ty);
+    else {
+        // 当前页的触摸事件 (虚函数分发; RadarView/StatusView 默认返回 false)
+        handled = pages[currentPage]->handleTouch(tx, ty);
     }
-#endif
 
     (void)handled;
 }

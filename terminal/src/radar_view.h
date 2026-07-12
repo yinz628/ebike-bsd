@@ -10,10 +10,11 @@
 #pragma once
 #include "lgfx_config.hpp"
 #include "uart_link.h"
+#include "base_view.h"
 
 extern LGFX lcd;
 
-class RadarView {
+class RadarView : public BaseView {
 private:
     LGFX_Sprite _bg;          // 静态背景缓存 (含扇形/标注/本车/翻页按钮)
     bool _bg_ready = false;   // 背景是否已渲染
@@ -125,9 +126,9 @@ private:
     }
 
 public:
-    void markDirty() { _dirty = true; }   // 切页时调用, 强制重绘
+    void markDirty() override { _dirty = true; }   // 切页时调用, 强制重绘
 
-    void draw(const TerminalState &st) {
+    void draw(const TerminalState &st) override {
         int w = lcd.width();
         int h = lcd.height();
 

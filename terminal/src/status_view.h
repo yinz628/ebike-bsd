@@ -8,10 +8,11 @@
 #pragma once
 #include "lgfx_config.hpp"
 #include "uart_link.h"
+#include "base_view.h"
 
 extern LGFX lcd;
 
-class StatusView {
+class StatusView : public BaseView {
 private:
     unsigned long bootMs = 0;
     bool     _dirty = true;          // 首次进入强制画一次
@@ -37,9 +38,9 @@ private:
     }
 
 public:
-    void markDirty() { _dirty = true; }   // 外部切页时调用, 强制重绘
+    void markDirty() override { _dirty = true; }   // 外部切页时调用, 强制重绘
 
-    void draw(const TerminalState &st) {
+    void draw(const TerminalState &st) override {
         if (bootMs == 0) bootMs = millis();
 
         // 运行时间每秒变化; 其他字段变化也触发; 否则不重绘
