@@ -138,6 +138,25 @@ void setup() {
     Serial.println("=== e-Bike BSD Turn Signal System (" FW_VERSION ") ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
 
+    // 诊断: 打印上次重启原因 (帮助我们区分 panic / WDT / 掉电 / 手动复位)
+    {
+        esp_reset_reason_t reason = esp_reset_reason();
+        const char *rs;
+        switch (reason) {
+            case ESP_RST_POWERON:    rs = "上电复位"; break;
+            case ESP_RST_EXT:        rs = "外部复位(EN)"; break;
+            case ESP_RST_SW:         rs = "软件重启(ESP.restart)"; break;
+            case ESP_RST_PANIC:      rs = "异常崩溃(panic)"; break;
+            case ESP_RST_INT_WDT:    rs = "中断看门狗"; break;
+            case ESP_RST_TASK_WDT:   rs = "任务看门狗(TWDT)"; break;
+            case ESP_RST_WDT:        rs = "硬件看门狗"; break;
+            case ESP_RST_BROWNOUT:   rs = "掉电(BROWNOUT)"; break;
+            case ESP_RST_SDIO:       rs = "SDIO复位"; break;
+            default:                 rs = "未知"; break;
+        }
+        Serial.printf("[RST] 上次重启原因: %s (%d)\n", rs, (int)reason);
+    }
+
     // OTA 主动回滚保护: 必须在所有可能 panic 的初始化之前.
     // 若本槽是新 OTA 槽且本次是第 N 次尝试 setup, 超阈值则强制回滚到上一好槽.
     otaBootGuardBegin();
@@ -233,13 +252,16 @@ void loop() {
             }
 
             if (millis() - g_wifi_idle_since >= 30000) {
-                Serial.println("[WIFI] 30s无连接, 关闭WiFi");
-                server.end();
-                delay(50);
-                WiFi.softAPdisconnect(true);
-                WiFi.enableAP(false);
-                WiFi.mode(WIFI_OFF);
-                g_wifi_running = false;
+                Serial.println("[WIFI] 30s无连接, 标记关闭 (跳过实际关WiFi, OTA场景需长连接)");
+                // 暂停关闭WiFi操作: 实测发现 WiFi.mode(WIFI_OFF) 在长时UART转发期间可能触发重启.
+                // 且 OTA 场景需要保持热点在线. 空闲时仅打印标志, 不实际关闭.
+                // server.end();
+                // delay(50);
+                // WiFi.softAPdisconnect(true);
+                // WiFi.enableAP(false);
+                // WiFi.mode(WIFI_OFF);
+                // g_wifi_running = false;
+                g_wifi_idle_since = millis(); // 重置计时, 防止连续刷日志
             }
         }
     }

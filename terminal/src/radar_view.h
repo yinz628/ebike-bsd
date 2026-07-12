@@ -206,10 +206,14 @@ private:
             lcd.printf(" %s", st.turn == 1 ? "LEFT<<<" : ">>>RIGHT");
         }
 
-        // 右侧: 连接状态
+        // 右侧: 连接状态 + 版本号
         lcd.setTextColor(st.online ? lgfx::color888(63, 185, 80) : lgfx::color888(248, 81, 73),
                          lgfx::color888(22, 27, 34));
         lcd.setCursor(w - 50, y + 3);
         lcd.print(st.online ? "ONLINE" : "OFFLINE");
+        // 固件版本号 (与主控 FW_VERSION 一致, 右侧下方显示)
+        lcd.setTextColor(lgfx::color888(139, 148, 158), lgfx::color888(22, 27, 34));
+        lcd.setCursor(w - 50, y + 12);
+        lcd.print(FW_VERSION);
     }
 };
