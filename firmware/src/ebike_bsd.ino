@@ -121,6 +121,7 @@ void blinkLEDs();
 void setTurnLEDs(bool on, bool left, bool right);
 void updateIndicatorLEDs();   // 集中LED状态机
 void debugOutput();
+void wifiAutoOffTick();       // WiFi 30s 无连接自动关状态机 (封装, 避免散落在 loop)
 
 // ===============================================================
 //  SETUP
@@ -223,50 +224,8 @@ void setup() {
 //  LOOP
 // ===============================================================
 void loop() {
-    // ==== WiFi 自动关状态机 ====
-    // 规则:
-    //   - 开机 / C3 手动开 / Web 触发: WiFi 开
-    //   - 任何来源开启后, 无设备连接 → 30s 后关 WiFi
-    //   - 有设备连接 → 保持 WiFi 开
-    //   - 设备断开 → 重新 30s 倒计时 → 关 WiFi
-    static unsigned long wifi_check = 0;
-
-    if (g_wifi_running && millis() - wifi_check > 2000) {
-        wifi_check = millis();
-
-        int sta_num = WiFi.softAPgetStationNum();
-
-        Serial.print("[WIFI] sta=");
-        Serial.print(sta_num);
-        Serial.print(" idle=");
-        Serial.print(g_wifi_idle_since ? (millis() - g_wifi_idle_since) / 1000 : 0);
-        Serial.println("s");
-
-        if (sta_num > 0) {
-            // 有设备连接 → 重置计时
-            g_wifi_idle_since = 0;
-        } else {
-            // 无设备连接
-            if (g_wifi_idle_since == 0) {
-                g_wifi_idle_since = millis();   // 开始空闲计时
-            }
-
-            // OTA 进行中 (主控上传 / C3 转发) → 跳过自动关, 保持 WiFi 稳定.
-            // (C3 OTA 转发耗时数分钟, 即使手机断开 sta=0, 也必须保持热点;
-            //  转发走 UART 不依赖 WiFi, 但设备不能关电.)
-            if (otaIsBusy()) {
-                g_wifi_idle_since = millis();   // 持续重置, 等价于"OTA 期间永远不算空闲"
-            } else if (millis() - g_wifi_idle_since >= 30000) {
-                Serial.println("[WIFI] 30s无连接, 关闭WiFi");
-                server.end();
-                delay(50);
-                WiFi.softAPdisconnect(true);
-                WiFi.enableAP(false);
-                WiFi.mode(WIFI_OFF);
-                g_wifi_running = false;
-            }
-        }
-    }
+    // ==== WiFi 30s 无连接自动关 (封装在 wifiAutoOffTick, 避免散落在 loop) ====
+    wifiAutoOffTick();
 
     // 1) 读取开关（含消抖）
     updateTurnControl();
@@ -728,6 +687,53 @@ void updateBuzzer() {
                 digitalWrite(BUZZER_PIN, HIGH);
             }
             break;
+    }
+}
+
+// ===============================================================
+//  WiFi 30s 无连接自动关状态机
+//
+//  规则:
+//    - 有设备连接 → 保持 WiFi 开, 重置空闲计时
+//    - 无设备连接 且 OTA 空闲 → 30s 后关 WiFi (省电)
+//    - 无设备连接 但 OTA 忙   → 保持 WiFi 开 (UART 转发需数分钟, 不能断电)
+//
+//  封装成函数: (1) 不污染 loop; (2) OTA 模块通过 otaIsBusy() 表达需求,
+//  WiFi 逻辑无需了解 OTA 内部状态, 职责清晰.
+// ===============================================================
+void wifiAutoOffTick() {
+    if (!g_wifi_running) return;
+
+    static unsigned long last_check = 0;
+    if (millis() - last_check < 2000) return;   // 每 2s 检查一次
+    last_check = millis();
+
+    int sta_num = WiFi.softAPgetStationNum();
+    bool otaBusy = otaIsBusy();
+
+    Serial.printf("[WIFI] sta=%d idle=%lus ota=%s\n", sta_num,
+                  g_wifi_idle_since ? (millis() - g_wifi_idle_since) / 1000 : 0,
+                  otaBusy ? "busy" : "idle");
+
+    if (sta_num > 0) {
+        // 有设备连接 → 重置空闲计时
+        g_wifi_idle_since = 0;
+        return;
+    }
+
+    // 无设备连接: OTA 忙 → 不允许关; OTA 空闲 → 正常 30s 倒计时
+    if (otaBusy) return;   // OTA 期间跳过自动关, 不动 idle_since (语义清晰: 不混淆计时器)
+
+    if (g_wifi_idle_since == 0) {
+        g_wifi_idle_since = millis();
+    } else if (millis() - g_wifi_idle_since >= 30000) {
+        Serial.println("[WIFI] 30s无连接且OTA空闲, 关闭WiFi");
+        server.end();
+        delay(50);
+        WiFi.softAPdisconnect(true);
+        WiFi.enableAP(false);
+        WiFi.mode(WIFI_OFF);
+        g_wifi_running = false;
     }
 }
 

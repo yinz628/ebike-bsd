@@ -204,21 +204,21 @@ inline String otaJsonEscape(const String &s) {
 // ============================================================
 //  OTA 忙判断 / WiFi 保活
 //
-//  otaIsBusy() 判断是否有 OTA 操作正在进行 (主控上传中/待重启, C3 暂存待转发/转发中).
-//  ebike_bsd.ino 的 WiFi 30s 自动关逻辑会查这个标志:
-//    - OTA 进行中 → 跳过自动关 (即使无设备连接也保持 WiFi, 因为 UART 转发需要时间)
-//    - OTA 未进行 → 正常 30s 无连接自动关 (省电)
-//  这样既保留日常省电, 又保证 OTA 期间 WiFi 稳定.
+//  otaIsBusy() 用黑名单: 只排除明确的终态 (IDLE/FAILED/SUCCESS),
+//  其余所有状态 (含未来新增的中间态) 都视为"忙" → 自动保持 WiFi.
+//  新增 OTA 状态时无需改这里, 不会漏判.
+//
+//  ebike_bsd.ino 的 WiFi 30s 自动关逻辑: 无设备连接 且 !otaIsBusy() → 30s 后关;
+//  OTA 进行中 → 跳过自动关 (即使无设备连接也保持, 因 UART 转发需数分钟).
 // ============================================================
 inline bool otaIsBusy() {
-    // 主控: 上传中 / 上传完成待重启
-    if (otaStatus.main_state == OTA_MAIN_UPLOADING || otaStatus.main_state == OTA_MAIN_SUCCESS)
-        return true;
-    // C3: 正在接收上传 / 已暂存待转发 / 转发中
-    if (otaStatus.c3_state == OTA_C3_UPLOADING || otaStatus.c3_state == OTA_C3_STAGED ||
-        otaStatus.c3_state == OTA_C3_RELAYING)
-        return true;
-    return false;
+    // 黑名单: 仅这几个终态不算忙. 新增中间状态自动算忙, 无需改本函数.
+    auto mainIdle = (otaStatus.main_state == OTA_MAIN_IDLE ||
+                     otaStatus.main_state == OTA_MAIN_FAILED);
+    auto c3Idle   = (otaStatus.c3_state == OTA_C3_IDLE ||
+                     otaStatus.c3_state == OTA_C3_FAILED ||
+                     otaStatus.c3_state == OTA_C3_SUCCESS);
+    return !(mainIdle && c3Idle);
 }
 
 inline void otaKeepWifiAlive() {
