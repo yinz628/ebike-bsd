@@ -52,7 +52,9 @@ jobs:
         run: pio run
 
       - name: Build C3 terminal firmware
+        id: build_c3
         working-directory: terminal
+        continue-on-error: true   # C3 构建失败不阻断主控发布 (CI 首次跑有不确定性)
         run: pio run
 
       - name: Determine version
@@ -71,25 +73,35 @@ jobs:
         run: |
           mkdir -p staging
           cp firmware/.pio/build/esp32dev/firmware.bin staging/firmware.bin
-          cp terminal/.pio/build/esp32-c3-devkitm-1/firmware.bin staging/c3.bin
+          # C3 可能构建失败 (continue-on-error), 仅在产物存在时纳入
+          HAVE_C3=0
+          if [ -f terminal/.pio/build/esp32-c3-devkitm-1/firmware.bin ]; then
+            cp terminal/.pio/build/esp32-c3-devkitm-1/firmware.bin staging/c3.bin
+            HAVE_C3=1
+          fi
+          echo "have_c3=$HAVE_C3" >> $GITHUB_ENV
+
           cd staging
           MAIN_SHA=$(sha256sum firmware.bin | awk '{print $1}')
-          C3_SHA=$(sha256sum c3.bin | awk '{print $1}')
           MAIN_SIZE=$(stat -c%s firmware.bin)
-          C3_SIZE=$(stat -c%s c3.bin)
           echo "main_sha=$MAIN_SHA" >> $GITHUB_ENV
-          echo "c3_sha=$C3_SHA" >> $GITHUB_ENV
           echo "main_size=$MAIN_SIZE" >> $GITHUB_ENV
-          echo "c3_size=$C3_SIZE" >> $GITHUB_ENV
+          if [ "$HAVE_C3" = "1" ]; then
+            C3_SHA=$(sha256sum c3.bin | awk '{print $1}')
+            C3_SIZE=$(stat -c%s c3.bin)
+            echo "c3_sha=$C3_SHA" >> $GITHUB_ENV
+            echo "c3_size=$C3_SIZE" >> $GITHUB_ENV
+          fi
 
       - name: Generate manifest.json
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           NOTES: ${{ github.event.inputs.notes }}
           MAIN_SHA: ${{ env.main_sha }}
-          C3_SHA: ${{ env.c3_sha }}
           MAIN_SIZE: ${{ env.main_size }}
+          C3_SHA: ${{ env.c3_sha }}
           C3_SIZE: ${{ env.c3_size }}
+          HAVE_C3: ${{ env.have_c3 }}
         run: |
           python3 - <<'PY'
           import json, os, datetime
@@ -100,11 +112,13 @@ jobs:
               "main_fw": "firmware.bin",
               "main_sha256": os.environ["MAIN_SHA"],
               "main_size": int(os.environ["MAIN_SIZE"]),
-              "c3_fw": "c3.bin",
-              "c3_sha256": os.environ["C3_SHA"],
-              "c3_size": int(os.environ["C3_SIZE"]),
               "notes": notes,
           }
+          # C3 可选 (CI 首次可能没构建出来)
+          if os.environ.get("HAVE_C3") == "1":
+              manifest["c3_fw"] = "c3.bin"
+              manifest["c3_sha256"] = os.environ["C3_SHA"]
+              manifest["c3_size"] = int(os.environ["C3_SIZE"])
           with open("staging/manifest.json", "w", encoding="utf-8") as f:
               json.dump(manifest, f, ensure_ascii=False, indent=2)
           print("=== manifest.json ===")
