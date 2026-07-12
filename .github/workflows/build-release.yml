@@ -49,6 +49,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
+      - name: Verify firmware version matches tag (防发错版本)
+        env:
+          EXPECTED: ${{ steps.ver.outputs.version }}
+        run: |
+          # 从源码提取 FW_VERSION, 校验与 tag 一致 (手动改源码忘了同步 tag 时会 fail)
+          MAIN_FW=$(grep -oP '#define FW_VERSION "\K[^"]+' firmware/src/ebike_bsd.ino | head -1)
+          C3_FW=$(grep -oP '#define FW_VERSION "\K[^"]+' terminal/src/c3_terminal.ino | head -1)
+          echo "主控 FW_VERSION=$MAIN_FW  C3 FW_VERSION=$C3_FW  期望(tag)=$EXPECTED"
+          if [ -z "$MAIN_FW" ] || [ -z "$C3_FW" ]; then
+            echo "::error::无法提取 FW_VERSION, 检查源码 #define FW_VERSION"; exit 1
+          fi
+          # 主控版本必须与 tag 完全一致; C3 版本可不同 (子版本号独立)
+          if [ "$MAIN_FW" != "$EXPECTED" ]; then
+            echo "::error::主控 FW_VERSION ($MAIN_FW) 与 tag ($EXPECTED) 不一致! 请先同步 firmware/src/ebike_bsd.ino 再发布"
+            exit 1
+          fi
+          echo "✓ 版本一致性校验通过"
+
       - name: Build main controller firmware
         working-directory: firmware
         run: pio run

@@ -185,6 +185,23 @@ inline uint16_t otaCrc16(const uint8_t *data, size_t len) {
 }
 
 // ============================================================
+//  JSON 字符串转义 (error 等动态内容拼进 JSON 前必须转义, 防 " \破坏结构)
+// ============================================================
+inline String otaJsonEscape(const String &s) {
+    String out;
+    out.reserve(s.length() + 4);
+    for (size_t i = 0; i < s.length(); i++) {
+        char c = s[i];
+        if (c == '"' || c == '\\') { out += '\\'; out += c; }
+        else if (c == '\n') { out += F("\\n"); }
+        else if (c == '\r') { out += F("\\r"); }
+        else if ((uint8_t)c < 0x20) { out += '?'; }   // 其他控制字符替换
+        else { out += c; }
+    }
+    return out;
+}
+
+// ============================================================
 //  OTA 忙判断 / WiFi 保活
 //
 //  otaIsBusy() 判断是否有 OTA 操作正在进行 (主控上传中/待重启, C3 暂存待转发/转发中).
@@ -295,7 +312,7 @@ inline void otaMainUploadDone(AsyncWebServerRequest *req) {
             F("{\"ok\":true,\"msg\":\"upload ok, rebooting\"}"));
     } else {
         resp = req->beginResponse(400, "application/json",
-            String(F("{\"ok\":false,\"msg\":\"")) + otaStatus.main_error + F("\"}"));
+            String(F("{\"ok\":false,\"msg\":\"")) + otaJsonEscape(otaStatus.main_error) + F("\"}"));
     }
     resp->addHeader("Access-Control-Allow-Origin", "*");
     req->send(resp);
@@ -320,6 +337,9 @@ inline void otaMainLoopTick() {
 inline void otaC3UploadHandler(AsyncWebServerRequest *req, const String& filename,
                                 size_t index, uint8_t *data, size_t len, bool final) {
     otaKeepWifiAlive();
+    // 持久文件句柄: 跨多次 multipart 回调复用, 避免每块 open/close.
+    // 单连接串行回调, 不会并发, static 安全. 首块(index==0)打开, final/失败关闭.
+    static File sC3FwFile;
 
     if (index == 0) {
         otaBoostTxPower();
@@ -333,17 +353,19 @@ inline void otaC3UploadHandler(AsyncWebServerRequest *req, const String& filenam
     }
 
     if (len > 0 && otaStatus.c3_state == OTA_C3_UPLOADING) {
-        // 追加写 (O_WRITE | O_APPEND | O_CREAT)
-        File f = SPIFFS.open(OTA_C3_FW_PATH, "a");
-        if (!f) {
+        // 首次写入时打开持久句柄 (覆盖写, 首块已 remove 旧文件)
+        if (!sC3FwFile) {
+            sC3FwFile = SPIFFS.open(OTA_C3_FW_PATH, "w");
+        }
+        if (!sC3FwFile) {
             otaStatus.c3_state = OTA_C3_FAILED;
             otaStatus.c3_error = "SPIFFS write open failed";
             Serial.println(F("[OTA] ERROR: SPIFFS 打开失败"));
             return;
         }
-        size_t w = f.write(data, len);
-        f.close();
+        size_t w = sC3FwFile.write(data, len);
         if (w != len) {
+            sC3FwFile.close();
             otaStatus.c3_state = OTA_C3_FAILED;
             otaStatus.c3_error = "SPIFFS write short";
             Serial.printf("[OTA] ERROR: SPIFFS write %u != %u\n", (unsigned)w, (unsigned)len);
@@ -354,6 +376,8 @@ inline void otaC3UploadHandler(AsyncWebServerRequest *req, const String& filenam
 
     if (final) {
         otaRestoreTxPower();
+        // 关闭持久句柄 (即使失败也关, 防止泄漏)
+        if (sC3FwFile) sC3FwFile.close();
         if (otaStatus.c3_state == OTA_C3_UPLOADING) {
             // 记录元信息 (供 /api/ota_c3_status 查询, 也作为"有待转发"标志)
             File m = SPIFFS.open(OTA_C3_META_PATH, "w");
@@ -380,7 +404,7 @@ inline void otaC3UploadDone(AsyncWebServerRequest *req) {
             F("{\"ok\":true,\"msg\":\"staged, relaying to C3\"}"));
     } else {
         resp = req->beginResponse(400, "application/json",
-            String(F("{\"ok\":false,\"msg\":\"")) + otaStatus.c3_error + F("\"}"));
+            String(F("{\"ok\":false,\"msg\":\"")) + otaJsonEscape(otaStatus.c3_error) + F("\"}"));
     }
     resp->addHeader("Access-Control-Allow-Origin", "*");
     req->send(resp);
@@ -624,7 +648,7 @@ inline void otaStatusHandler(AsyncWebServerRequest *req) {
     j += ",\"total\":"; j += otaStatus.main_total;
     j += ",\"slot\":\""; j += otaGetRunningSlot(); j += "\"";
     j += ",\"version\":\""; j += FW_VERSION; j += "\"";
-    if (otaStatus.main_error.length()) { j += ",\"error\":\""; j += otaStatus.main_error; j += "\""; }
+    if (otaStatus.main_error.length()) { j += ",\"error\":\""; j += otaJsonEscape(otaStatus.main_error); j += "\""; }
     j += "},";
     // C3
     const char* cs;
@@ -641,7 +665,7 @@ inline void otaStatusHandler(AsyncWebServerRequest *req) {
     j += "\",\"seq\":"; j += otaStatus.c3_relay_seq;
     j += ",\"total\":"; j += otaStatus.c3_relay_total;
     j += ",\"staged_size\":"; j += otaStatus.c3_staged_size;
-    if (otaStatus.c3_error.length()) { j += ",\"error\":\""; j += otaStatus.c3_error; j += "\""; }
+    if (otaStatus.c3_error.length()) { j += ",\"error\":\""; j += otaJsonEscape(otaStatus.c3_error); j += "\""; }
     j += "}}";
     AsyncWebServerResponse *resp = req->beginResponse(200, "application/json", j);
     resp->addHeader("Access-Control-Allow-Origin", "*");

@@ -388,6 +388,15 @@ private:
         if (comma >= 0) c3OtaProgress.version = String(body).substring(comma + 1);
 
         Serial.printf("[OTA] 收到 $OTAB size=%u\n", (unsigned)size);
+        // size 合理性校验: 必须大于 0 且不超过当前 OTA 槽可用空间.
+        // 用 esp_ota_get_next_update_partition 动态获取目标槽大小, 不硬编码.
+        const esp_partition_t *next = esp_ota_get_next_update_partition(nullptr);
+        size_t maxAppSize = next ? next->size : (2 * 1024 * 1024);   // 兜底 2MB
+        if (size == 0 || size > maxAppSize) {
+            Serial.printf("[OTA] ERROR: size %u 越界 (max %u)\n", (unsigned)size, (unsigned)maxAppSize);
+            otaSendAck(("OTAFAIL,size_" + String((unsigned)size)).c_str());
+            return;
+        }
         if (!Update.begin(size)) {
             Serial.println(F("[OTA] ERROR: Update.begin failed"));
             otaSendAck("OTAFAIL,begin_failed");
@@ -434,9 +443,11 @@ private:
             return;
         }
 
-        // hex 解码
+        // hex 解码: 必须是非空偶数长度, 且解码后不超过单块上限
+        // (空块 hexLen=0 会让 Update.write(_,0) 行为未定义, 必须拒绝)
         size_t hexLen = hexPart.length();
-        if (hexLen % 2 != 0 || hexLen / 2 > OTA_BLOCK_BYTES) {
+        if (hexLen < 2 || hexLen % 2 != 0 || hexLen / 2 > OTA_BLOCK_BYTES) {
+            Serial.printf("[OTA] hex 长度异常 (%u), NACK 块 %u\n", (unsigned)hexLen, (unsigned)seq);
             otaSendAck(("OTAN," + String(seq)).c_str());
             return;
         }
