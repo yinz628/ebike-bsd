@@ -69,6 +69,11 @@ private:
 
     static const int BTN_MINUS_X = 115, BTN_PLUS_X = 161;
     static const int BTN_W = 44, BTN_H = 22;
+    // 底部 SAVE/REFRESH 按钮区域 (绘制和命中共用, 避免错位)
+    static const int FOOTER_BTN_Y = 205;   // y 起点 (绘制和命中一致)
+    static const int FOOTER_BTN_H = 31;    // 命中高度 (覆盖 205~236 的按钮区)
+    static const int SAVE_BTN_X = 5, SAVE_BTN_W = 91;       // SAVE: x∈[5, 96]
+    static const int REFRESH_BTN_X = 100, REFRESH_BTN_W = 91; // REFRESH: x∈[100, 191]
 
     bool hitMinus(int tx, int ty, int y) {
         return tx >= BTN_MINUS_X && tx <= BTN_MINUS_X + BTN_W && ty >= y - 2 && ty <= y - 2 + BTN_H;
@@ -169,19 +174,19 @@ public:
             }
         }
 
-        // 底部按钮 (y=214): [SAVE] + [REFRESH]
+        // 底部按钮: [SAVE] + [REFRESH] (坐标用常量, 绘制与命中共用同一组)
         // ⚠ 都放左半屏到中间, 避开右边缘触摸死区 (raw_y>290 时坐标不准)
-        int by = 214;
-        // SAVE (x=5~95, 绿色/灰)
-        lcd.fillRoundRect(5, by, 90, 22, 4,
+        int by = FOOTER_BTN_Y;
+        // SAVE
+        lcd.fillRoundRect(SAVE_BTN_X, by, SAVE_BTN_W, 22, 4,
                           dirty ? lgfx::color888(63, 185, 80) : lgfx::color888(48, 54, 61));
         lcd.setTextColor(dirty ? lgfx::color888(0, 0, 0) : lgfx::color888(139, 148, 158));
         lcd.setTextSize(1);
         lcd.setCursor(25, by + 7);
         lcd.print("[SAVE]");
 
-        // REFRESH (x=100~190, 蓝色) — 查询主控当前配置
-        lcd.fillRoundRect(100, by, 90, 22, 4, lgfx::color888(88, 166, 255));
+        // REFRESH (蓝色) — 查询主控当前配置
+        lcd.fillRoundRect(REFRESH_BTN_X, by, REFRESH_BTN_W, 22, 4, lgfx::color888(88, 166, 255));
         lcd.setTextColor(lgfx::color888(0, 0, 0));
         lcd.setCursor(112, by + 7);
         lcd.print("[REFRESH]");
@@ -206,9 +211,10 @@ public:
     bool handleTouch(int tx, int ty) {
         int n = tabCount[tab];
 
-        // 底部按钮优先判断 (y >= 205, 避免被参数行选中拦截)
-        // SAVE (x=0~95)
-        if (ty >= 205 && tx <= 95) {
+        // 底部按钮优先判断 (用常量, 与绘制区一致)
+        // SAVE
+        if (ty >= FOOTER_BTN_Y && ty < FOOTER_BTN_Y + FOOTER_BTN_H &&
+            tx >= SAVE_BTN_X && tx < SAVE_BTN_X + SAVE_BTN_W) {
             if (dirty) {
                 // 逐个发送参数, 最后发 SAVE 触发主控持久化到 NVS
                 for (int i = 0; i < NPARAM; i++) {
@@ -221,8 +227,9 @@ public:
             }
             return true;
         }
-        // REFRESH (x=100~190)
-        if (ty >= 205 && tx >= 100 && tx <= 190) {
+        // REFRESH
+        if (ty >= FOOTER_BTN_Y && ty < FOOTER_BTN_Y + FOOTER_BTN_H &&
+            tx >= REFRESH_BTN_X && tx < REFRESH_BTN_X + REFRESH_BTN_W) {
             netLink.requestConfig();
             refreshMsg = millis();   // 显示反馈 2 秒
             Serial.println("[CFG] refresh requested");

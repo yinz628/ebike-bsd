@@ -238,30 +238,6 @@ public:
         Serial.println("[UART] 终端链路就绪 (115200, RX=19/TX=18)");
     }
 
-    // 主控离线时填入模拟数据, 用于在无主控连接时验证显示视图
-    // (3 个目标 + 各状态字段, 模拟接近/远离场景)
-    void loadDemoData() {
-        state.reset();
-        state.obj_num = 3;
-        state.bz_mode = 1;        // BSD 短鸣
-        state.ind_l = 1;          // 左 BSD 慢闪
-        state.ind_r = 2;          // 右 RCW 快闪
-        state.turn = 0;
-        state.rcw_l = false;
-        state.rcw_r = true;
-        state.valid = true;
-        state.rx_bytes = 12345;
-        state.det_range = 25;
-        // 目标 0: 左后方接近 (负角=左, 15m, +3m/s 接近)
-        state.objs[0] = { 15, -28, 3, 0 };
-        // 目标 1: 正后方中距 (0°, 20m, +1m/s)
-        state.objs[1] = { 20, 0, 1, 1 };
-        // 目标 2: 右后方远离 (正角=右, 35m, -2m/s 远离)
-        state.objs[2] = { 35, 25, -2, 2 };
-        state.last_frame_ms = millis();
-        state.online = false;     // demo 模式标记为离线 (状态条显示 OFFLINE)
-    }
-
     // 主循环调用: 读主控发来的 $S 帧
     void update() {
         if (!_serial) return;
@@ -321,12 +297,10 @@ public:
         return true;
     }
 
-    // 兼容 config_view 旧接口
-    void sendSave()  { if (_serial) _serial->print("$C,SAVE\n");  }
-    void sendReset() { if (_serial) _serial->print("$C,RESET\n"); }
-    bool sendFactoryReset() { sendReset(); return true; }
+    // 触摸提交配置保存
+    void sendSave()  { if (_serial) _serial->print("$C,SAVE\n"); }
 
-    // 查询主控当前配置: 发 $C,GETCFG → 主控回 $CFG,12个值
+    // 查询主控当前配置: 发 $C,GETCFG → 主控回 $CFG,15个值
     void requestConfig() {
         if (_serial) {
             _serial->print("$C,GETCFG\n");

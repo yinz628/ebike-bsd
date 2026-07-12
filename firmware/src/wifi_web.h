@@ -42,7 +42,7 @@ void handleStatus(AsyncWebServerRequest *req) {
     r["bytes"]   = radar.getTotalBytes();
     r["det_range"] = config.radar.det_range;
     JsonArray tgts = r["list"].to<JsonArray>();
-    for (int i = 0; i < f->obj_num && i < 8; i++) {
+    for (int i = 0; i < f->obj_num && i < BSD_MAX_OBJECTS; i++) {
         JsonObject t = tgts.createNestedObject();
         t["id"]=i; t["range"]=f->objects[i].range;
         t["angle"]=f->objects[i].angle; t["velo"]=f->objects[i].velocity;

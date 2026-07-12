@@ -52,7 +52,6 @@
 #define BLINK_INTERVAL_NORMAL   667   // 1.5Hz 正常闪烁 (ms)
 #define MAIN_LOOP_DELAY        50     // 主循环周期 (ms)
 #define BUZZER_BEEP_DURATION   150    // 蜂鸣单次时长 (ms)
-#define STATE_DEBOUNCE_MS      50     // 按键消抖间隔 (TODO: updateTurnControl 尚未实现消抖)
 
 
 // LED 指示灯模式 (独立状态机)
@@ -431,7 +430,7 @@ void updateTurnAssist() {
 
     bool danger = false;
 
-    for (int i = 0; i < f->obj_num && i < 8; i++) {
+    for (int i = 0; i < f->obj_num && i < BSD_MAX_OBJECTS; i++) {
         BSDObj *obj = &f->objects[i];
         if (obj->range <= 0 || obj->range >= config.turn.range_limit) continue;
         if (obj->velocity < config.turn.speed_threshold) continue;
@@ -511,7 +510,7 @@ void updateRCW() {
         last_ts = f->timestamp;
         
         bool leftLow=false, rightLow=false, leftHigh=false, rightHigh=false;
-        for (int i = 0; i < f->obj_num && i < 8; i++) {
+        for (int i = 0; i < f->obj_num && i < BSD_MAX_OBJECTS; i++) {
             BSDObj *obj = &f->objects[i];
             if (obj->range <= 0 || obj->range > config.rcw.range_limit) continue;
 
@@ -778,7 +777,7 @@ void debugOutput() {
     if (bsd_l_active) Serial.print(" L*");
     if (bsd_r_active) Serial.print(" R*");
 
-    for (int i = 0; i < f->obj_num && i < 4; i++) {
+    for (int i = 0; i < f->obj_num && i < BSD_MAX_OBJECTS; i++) {
         Serial.print(" [");
         Serial.print(f->objects[i].range);
         Serial.print("m,");
@@ -804,7 +803,7 @@ void debugOutput() {
     // 角度方向文字标识
     if (f->obj_num > 0) {
         Serial.print(" | DIR:");
-        for (int i = 0; i < f->obj_num && i < 3; i++) {
+        for (int i = 0; i < f->obj_num && i < 3; i++) {   // debug 只显示前 3 个目标 (截断, 非安全约束)
             int8_t a = f->objects[i].angle;
             if (ANGLE_IS_LEFT(a))       Serial.print("L");
             else if (ANGLE_IS_RIGHT(a)) Serial.print("R");

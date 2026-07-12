@@ -146,34 +146,7 @@ public:
     }
 };
 
-// ============ 兼容旧代码的BSD配置命令常量 (已被主固件使用) ============
+// ============ 兼容常量 (BSD_FRAME_HEADER 被 ms60_radar.h 使用) ============
 #define BSD_FRAME_HEADER       HEAD_REPORT
-#define CONFIG_FRAME_HEADER    HEAD_CMD
-#define BSD_CMD_GROUP          0x09  // 旧代码使用，实际已废弃
-#define BSD_CMD_TYPE_DATA      0x07
-#define CMD_GROUP_CONFIG       0x01
-#define CMD_QUERY_VERSION      0x10
-#define CMD_SET_DET_RANGE      0x02
-#define CMD_SET_SENSITIVITY    0x03
-#define CMD_ENABLE_BSD         0x05
-
-// ============ 旧版 buildConfigCmd (兼容主固件) ============
-static size_t buildConfigCmd(uint8_t cmd, const uint8_t *params,
-                              uint8_t param_len, uint8_t *buf, size_t buf_size) {
-    // 格式: 58 + CMD_GROUP + CMD + LEN + PARAMS + CHECK(1B)
-    if (!buf || buf_size < (size_t)(5 + param_len)) return 0;
-    
-    size_t pos = 0;
-    buf[pos++] = CONFIG_FRAME_HEADER;
-    buf[pos++] = CMD_GROUP_CONFIG;
-    buf[pos++] = cmd;
-    buf[pos++] = param_len;
-    for (int i = 0; i < param_len; i++) buf[pos++] = params[i];
-    
-    uint8_t checksum = 0;
-    for (size_t i = 0; i < pos; i++) checksum += buf[i];
-    buf[pos++] = checksum;
-    return pos;
-}
 
 #endif

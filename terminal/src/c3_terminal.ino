@@ -59,13 +59,6 @@ bool readTouch(int *x, int *y) {
 #define ENABLE_CONFIG_VIEW    // P3: 配置页 + 触摸
 #define ENABLE_ALERT_SOUND    // P4: ES8311 报警音 (功放默认关闭, 播放时才使能)
 
-// 主控离线时显示模拟数据 (验证视图用; 接上主控后自动切换真实数据)
-// 注: 生产环境注释掉, 避免主控离线时显示假目标误导用户
-// #define DEMO_WHEN_OFFLINE
-
-// 心跳日志开关 (每 2 秒打印 [HB] 在线状态; 调试时取消注释, 日常运行关闭省串口开销)
-// #define ENABLE_HB_LOG
-
 #ifdef ENABLE_RADAR_VIEW
 #include "radar_view.h"
 RadarView radarView;
@@ -135,12 +128,6 @@ void setup() {
     Serial.println("[INIT] 屏幕未启用. 定义 ENABLE_DISPLAY 开启屏幕");
 #endif
 
-    // 主控离线时加载模拟数据 (验证雷达图视图)
-#ifdef DEMO_WHEN_OFFLINE
-    netLink.loadDemoData();
-    Serial.println("[DEMO] 已加载模拟目标数据 (主控离线时显示)");
-#endif
-
     // ES8311 报警音 (I2C 总线需在 lcd.init 之后, 共用 SDA=0/SCL=1)
 #ifdef ENABLE_ALERT_SOUND
     alertSound.init();
@@ -208,17 +195,6 @@ void loop() {
     // 4. 报警音同步
 #ifdef ENABLE_ALERT_SOUND
     alertSound.update(netLink.state.bz_mode);
-#endif
-
-    // 心跳 (每 2 秒, 确认固件在跑 + 显示在线状态; 仅调试时开启)
-#ifdef ENABLE_HB_LOG
-    static unsigned long lastHb = 0;
-    if (millis() - lastHb > 2000) {
-        lastHb = millis();
-        Serial.printf("[HB] online=%d last_frame=%lums ago\n",
-                      netLink.state.online,
-                      netLink.state.online ? (millis() - netLink.state.last_frame_ms) : 0);
-    }
 #endif
 
     delay(66);   // ~15fps 刷新 (主控 $S 推送 10Hz, 无需更快; 减少 SPI 总线占用防撕裂)
