@@ -32,6 +32,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 需要写权限才能推 gh-pages 分支 (GITHUB_TOKEN 默认只读)
     steps:
       - uses: actions/checkout@v4
         with:
