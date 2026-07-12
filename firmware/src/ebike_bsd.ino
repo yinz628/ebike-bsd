@@ -251,15 +251,20 @@ void loop() {
                 g_wifi_idle_since = millis();   // 开始空闲计时
             }
 
-	            if (millis() - g_wifi_idle_since >= 30000) {
-	                Serial.println("[WIFI] 30s无连接, 关闭WiFi (OTA转发期间需保持热点, 考虑临时关闭此功能)");
-	                server.end();
-	                delay(50);
-	                WiFi.softAPdisconnect(true);
-	                WiFi.enableAP(false);
-	                WiFi.mode(WIFI_OFF);
-	                g_wifi_running = false;
-	            }
+            // OTA 进行中 (主控上传 / C3 转发) → 跳过自动关, 保持 WiFi 稳定.
+            // (C3 OTA 转发耗时数分钟, 即使手机断开 sta=0, 也必须保持热点;
+            //  转发走 UART 不依赖 WiFi, 但设备不能关电.)
+            if (otaIsBusy()) {
+                g_wifi_idle_since = millis();   // 持续重置, 等价于"OTA 期间永远不算空闲"
+            } else if (millis() - g_wifi_idle_since >= 30000) {
+                Serial.println("[WIFI] 30s无连接, 关闭WiFi");
+                server.end();
+                delay(50);
+                WiFi.softAPdisconnect(true);
+                WiFi.enableAP(false);
+                WiFi.mode(WIFI_OFF);
+                g_wifi_running = false;
+            }
         }
     }
 

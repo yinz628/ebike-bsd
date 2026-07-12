@@ -185,8 +185,25 @@ inline uint16_t otaCrc16(const uint8_t *data, size_t len) {
 }
 
 // ============================================================
-//  WiFi 保活 / 功率提升 (OTA 期间避免 30s 自动关, 提高吞吐)
+//  OTA 忙判断 / WiFi 保活
+//
+//  otaIsBusy() 判断是否有 OTA 操作正在进行 (主控上传中/待重启, C3 暂存待转发/转发中).
+//  ebike_bsd.ino 的 WiFi 30s 自动关逻辑会查这个标志:
+//    - OTA 进行中 → 跳过自动关 (即使无设备连接也保持 WiFi, 因为 UART 转发需要时间)
+//    - OTA 未进行 → 正常 30s 无连接自动关 (省电)
+//  这样既保留日常省电, 又保证 OTA 期间 WiFi 稳定.
 // ============================================================
+inline bool otaIsBusy() {
+    // 主控: 上传中 / 上传完成待重启
+    if (otaStatus.main_state == OTA_MAIN_UPLOADING || otaStatus.main_state == OTA_MAIN_SUCCESS)
+        return true;
+    // C3: 正在接收上传 / 已暂存待转发 / 转发中
+    if (otaStatus.c3_state == OTA_C3_UPLOADING || otaStatus.c3_state == OTA_C3_STAGED ||
+        otaStatus.c3_state == OTA_C3_RELAYING)
+        return true;
+    return false;
+}
+
 inline void otaKeepWifiAlive() {
     g_wifi_running = true;
     g_wifi_idle_since = 0;   // 重置 30s 空闲计时
@@ -286,8 +303,10 @@ inline void otaMainUploadDone(AsyncWebServerRequest *req) {
 
 // 在 loop() 中调用: 处理上传成功后的延迟重启
 inline void otaMainLoopTick() {
+    // 用无符号差值比较, 避免 millis() 49.7 天回绕时误判
     if (otaStatus.main_state == OTA_MAIN_SUCCESS && otaStatus.main_reboot_at &&
-        millis() >= otaStatus.main_reboot_at) {
+        (unsigned long)(millis() - otaStatus.main_reboot_at) < 0x80000000UL &&
+        (long)(millis() - otaStatus.main_reboot_at) >= 0) {
         Serial.println(F("[OTA] 重启中..."));
         Serial.flush();
         delay(100);
@@ -343,6 +362,11 @@ inline void otaC3UploadHandler(AsyncWebServerRequest *req, const String& filenam
                 m.close();
             }
             otaStatus.c3_state = OTA_C3_STAGED;
+            // C3 固件版本号: 手机上传时通常无版本信息, 用固件大小作为标识
+            // (C3 屏幕显示"目标: <version>", 空字符串体验差)
+            if (otaStatus.c3_staged_version.length() == 0) {
+                otaStatus.c3_staged_version = String("size:") + otaStatus.c3_staged_size;
+            }
             Serial.printf("[OTA] C3 固件已暂存到 SPIFFS: %u bytes, 等待转发\n",
                           (unsigned)otaStatus.c3_staged_size);
         }
