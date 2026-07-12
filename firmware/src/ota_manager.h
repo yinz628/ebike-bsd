@@ -22,6 +22,7 @@
 #include <Arduino.h>
 #include <Update.h>
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <HardwareSerial.h>
@@ -91,17 +92,81 @@ inline const char* otaGetRunningSlot() {
 }
 
 // 是否刚从 OTA 更新启动 (本槽待确认), 用于 setup() 末尾调 mark_valid
+// NEW 和 PENDING_VERIFY 都表示"尚未确认", 首次启动是 NEW, 后续重启 bootloader 标记为 PENDING_VERIFY
 inline bool otaIsPendingVerify() {
     esp_ota_img_states_t st = ESP_OTA_IMG_UNDEFINED;
     if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) != ESP_OK) return false;
-    return st == ESP_OTA_IMG_PENDING_VERIFY;
+    return st == ESP_OTA_IMG_PENDING_VERIFY || st == ESP_OTA_IMG_NEW;
 }
 
-// 确认本槽健康 (setup 末尾调, 取消回滚挂起)
+// ============================================================
+//  阻止 Arduino-ESP32 core 自动确认新 OTA 固件
+//
+//  Arduino core 的 initArduino() (在 app_main 里, 早于 setup) 默认会调
+//  esp_ota_mark_app_valid_cancel_rollback() 把新槽直接标记 VALID, 绕过 pending_verify.
+//  这会让 bootloader 回滚机制 + 我们的 boot guard 全部失效 (实测确认).
+//
+//  这两个函数是 __attribute__((weak)), 这里覆盖:
+//    verifyRollbackLater() = true  → 告诉 core "我要稍后自己验证, 别自动确认"
+//    verifyOta()           = false → 双保险: 即使 core 想确认, 也判定为不通过 → 它会自动回滚
+//
+//  ⚠ verifyOta 返回 false 会让 core 主动 esp_ota_mark_invalid_rollback_and_reboot(),
+//     所以必须配合 verifyRollbackLater()=true 阻止 core 介入, 由我们的 otaBootGuardBegin()
+//     统一处理 (允许 N 次尝试, 不至于首启 panic 就立即回滚).
+// ============================================================
+extern "C" {
+    bool verifyRollbackLater() { return true; }   // 应用层稍后验证, 阻止 core 自动确认
+}
+
+// ============================================================
+//  应用层主动回滚保护 (补足 bootloader 默认不自动回滚的缺口)
+//
+//  背景: ESP-IDF 的 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE 默认行为下,
+//        新 OTA app panic/WDT 重启后 bootloader 不会自动回滚 (需 app 主动调
+//        mark_invalid). 纯靠 bootloader 计数需要改 sdkconfig, 这里用 NVS 计数兜底.
+//
+//  原理: setup() 最开始调 otaBootGuardBegin() 记一次"尝试启动" (NVS 计数+1).
+//        若 setup() 正常跑完 (到 otaMarkValid), 计数清零.
+//        若 setup() 中途 panic/重启, 下次启动计数又+1; 超过阈值 → 主动回滚.
+// ============================================================
+#define OTA_BOOTGUARD_NS    "ota_guard"
+#define OTA_BOOTGUARD_KEY   "bootfails"
+#define OTA_BOOTGUARD_MAX      3   // 连续 3 次 setup 未完成 → 判定坏固件, 回滚
+
+// setup() 开头调用: 若本槽待确认, 记一次失败尝试; 超阈值则强制回滚
+inline void otaBootGuardBegin() {
+    if (!otaIsPendingVerify()) return;   // 已确认过的好槽 (UNDEFINED/VALID), 不计数
+
+    Preferences prefs;
+    if (!prefs.begin(OTA_BOOTGUARD_NS, false)) return;
+    int fails = prefs.getInt(OTA_BOOTGUARD_KEY, 0) + 1;
+    prefs.putInt(OTA_BOOTGUARD_KEY, fails);
+    prefs.end();
+
+    Serial.printf("[OTA-GUARD] 新固件第 %d/%d 次尝试启动\n", fails, OTA_BOOTGUARD_MAX);
+    if (fails >= OTA_BOOTGUARD_MAX) {
+        Serial.println(F("[OTA-GUARD] 连续启动失败超阈值 → 强制回滚到上一好槽"));
+        if (prefs.begin(OTA_BOOTGUARD_NS, false)) {
+            prefs.putInt(OTA_BOOTGUARD_KEY, 0);
+            prefs.end();
+        }
+        Serial.flush();
+        delay(100);
+        esp_ota_mark_app_invalid_rollback_and_reboot();   // 不会返回
+    }
+}
+
+// 确认本槽健康 (setup 末尾调, 取消回滚挂起 + 清失败计数)
 inline void otaMarkValid() {
     if (otaIsPendingVerify()) {
         esp_ota_mark_app_valid_cancel_rollback();
         Serial.println(F("[OTA] 本槽已标记 valid (取消回滚挂起)"));
+        // 清 boot guard 失败计数
+        Preferences prefs;
+        if (prefs.begin(OTA_BOOTGUARD_NS, false)) {
+            prefs.putInt(OTA_BOOTGUARD_KEY, 0);
+            prefs.end();
+        }
     }
 }
 

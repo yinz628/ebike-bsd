@@ -131,12 +131,16 @@ void setup() {
     // 禁用任务看门狗 (setup耗时较长: WiFi+雷达初始化+Flash保存)
     // 禁用任务看门狗 (setup耗时较长)
     esp_task_wdt_deinit();
-    
+
     Serial.begin(SERIAL_DEBUG_BAUD);
     Serial.setTimeout(50);   // readStringUntil 最多阻塞 50ms (默认 1000ms 会卡住 loop)
     Serial.println();
     Serial.println("=== e-Bike BSD Turn Signal System (" FW_VERSION ") ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
+
+    // OTA 主动回滚保护: 必须在所有可能 panic 的初始化之前.
+    // 若本槽是新 OTA 槽且本次是第 N 次尝试 setup, 超阈值则强制回滚到上一好槽.
+    otaBootGuardBegin();
 
     // 加载配置
     // ⚠ loadFromNVS 失败时不写 NVS: 失败原因可能是 NVS 分区被破坏(otadata 越界擦除等),

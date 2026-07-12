@@ -17,6 +17,7 @@
 #pragma once
 #include <Arduino.h>
 #include <Update.h>
+#include <Preferences.h>
 #include <esp_ota_ops.h>
 
 #define TERM_BAUD 115200
@@ -65,6 +66,49 @@ inline void c3OtaMarkValid() {
     if (c3OtaIsPendingVerify()) {
         esp_ota_mark_app_valid_cancel_rollback();
         Serial.println(F("[OTA] 本槽已标记 valid (取消回滚挂起)"));
+        // 清 boot guard 失败计数
+        Preferences prefs;
+        if (prefs.begin("ota_guard", false)) {
+            prefs.putInt("bootfails", 0);
+            prefs.end();
+        }
+    }
+}
+
+// ============================================================
+//  应用层主动回滚保护 (补足 bootloader 默认不自动回滚的缺口)
+//
+//  Arduino-ESP32 core 的 initArduino() (app_main, 早于 setup) 默认会自动调
+//  esp_ota_mark_app_valid_cancel_rollback() 把新槽标记 VALID, 绕过 pending_verify
+//  → 让 bootloader 回滚失效. 实测确认 (主控端同一问题已验证).
+//
+//  覆盖 weak 函数 verifyRollbackLater()=true 阻止 core 自动确认,
+//  让新槽保持 pending, 由下面的 boot guard 统一处理.
+// ============================================================
+extern "C" {
+    bool verifyRollbackLater() { return true; }
+}
+
+#define C3_OTA_BOOTGUARD_MAX 3
+inline void c3OtaBootGuardBegin() {
+    if (!c3OtaIsPendingVerify()) return;   // 已确认好槽, 不计数
+
+    Preferences prefs;
+    if (!prefs.begin("ota_guard", false)) return;
+    int fails = prefs.getInt("bootfails", 0) + 1;
+    prefs.putInt("bootfails", fails);
+    prefs.end();
+
+    Serial.printf("[OTA-GUARD] 新固件第 %d/%d 次尝试启动\n", fails, C3_OTA_BOOTGUARD_MAX);
+    if (fails >= C3_OTA_BOOTGUARD_MAX) {
+        Serial.println(F("[OTA-GUARD] 连续启动失败超阈值 → 强制回滚"));
+        if (prefs.begin("ota_guard", false)) {
+            prefs.putInt("bootfails", 0);
+            prefs.end();
+        }
+        Serial.flush();
+        delay(100);
+        esp_ota_mark_app_invalid_rollback_and_reboot();
     }
 }
 

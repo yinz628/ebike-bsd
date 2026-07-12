@@ -108,6 +108,10 @@ void setup() {
     Serial.println("\n=== ebike-bsd C3 终端 " FW_VERSION " ===");
     Serial.println("Hardware: 立创实战派 ESP32-C3");
 
+    // OTA 主动回滚保护: 必须在所有可能 panic 的初始化之前.
+    // 若本槽是新 OTA 槽且本次是第 N 次尝试 setup, 超阈值则强制回滚到上一好槽.
+    c3OtaBootGuardBegin();
+
     // UART 链路 (接主控) — P1 阶段核心, 必须先于屏幕验证
     netLink.init();
 
