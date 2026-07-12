@@ -3,7 +3,7 @@
 本系统支持通过手机网页对**主控 ESP32**和**车把终端 C3**进行无线固件升级。
 ESP32 只作为 WiFi 热点(不联网),固件通过 jsDelivr CDN 分发,手机用浏览器拉取后推送。
 
-> **实车测试状态**: 主控 OTA 已实车验证通过(升级+回滚); C3 OTA 协议已验证(接收正常), 完整传输待解决主控长时转发重启问题(见末尾"已知问题")。
+> **实车测试状态**: 主控 OTA 全通过(升级+回滚+WiFi共存); C3 OTA 全通过(协议+完整传输+超时保护)。8 个实车问题全部修复, 代码经多轮审查与重构。
 
 ## 一、首次准备(一次性)
 
@@ -105,13 +105,14 @@ Action 会:
 
 | 文件 | 作用 |
 |---|---|
-| `firmware/src/ota_manager.h` | 主控 OTA 核心(上传端点 + SPIFFS 暂存 + C3 转发状态机 + 回滚保护) |
+| `firmware/src/ota_manager.h` | 主控 OTA 核心(上传端点 + SPIFFS 暂存 + C3 转发状态机 + 回滚保护 + `otaIsBusy()`/`otaJsonEscape()`) |
 | `firmware/src/wifi_web.h` | Web UI 升级卡片 + JS 一键/手动上传 |
 | `firmware/src/terminal_link.h` | C3 OTA 回复(OTAR/OTAN/OTAOK/OTAFAIL)分发 |
-| `terminal/src/uart_link.h` | C3 OTA 接收(Update.write + ACK/NACK + 回滚保护) |
-| `terminal/src/c3_terminal.ino` | C3 升级中屏幕提示 + 回滚确认 |
+| `firmware/src/ebike_bsd.ino` | `wifiAutoOffTick()` WiFi 自动关状态机(封装, OTA 忙时跳过) |
+| `terminal/src/uart_link.h` | C3 OTA 接收(Update.write + ACK/NACK + 回滚保护 + size/hex 校验) |
+| `terminal/src/c3_terminal.ino` | C3 升级中屏幕提示 + 回滚确认 + 15s 超时保护 |
 | `terminal/partitions_ota_8M.csv` | C3 OTA 双槽分区表 |
-| `.github/workflows/build-release.yml` | 自动构建 + 发布 manifest 到 gh-pages |
+| `.github/workflows/build-release.yml` | 自动构建 + 版本一致性校验 + 发布 manifest 到 gh-pages |
 
 ## 七、实车测试结果 (2026-07-12)
 
@@ -122,6 +123,7 @@ Action 会:
 | 版本号 + 启动 | ✅ | V2.8 串口横幅, SPIFFS/WiFi/Web 全部正常 |
 | OTA 上传升级 | ✅ | ota_0→ota_1, 996KB / 7.4s, SHA-256 校验通过 |
 | 自动回滚 | ✅ | 坏固件(setup死循环)→3 次重启→boot guard 触发→回 ota_0 |
+| WiFi 自动关 + OTA 共存 | ✅ | 日常 30s 省电不变, OTA 期间保持稳定 |
 
 ### 分发链路 — ✅ 通过
 
@@ -131,16 +133,19 @@ Action 会:
 | jsDelivr CDN | ✅ | manifest.json HTTP 200, 内容完整 |
 | 手机网页云端检查 | ✅ | 显示"云端最新 V2.8" |
 
-### C3 终端 OTA — ⚠️ 协议通过, 完整传输待解决
+### C3 终端 OTA — ✅ 全部通过
 
 | 测试 | 结果 | 说明 |
 |---|---|---|
 | 分区表重刷 | ✅ | bootloader 识别 ota_0/ota_1/otadata 双槽 |
-| OTA 协议接收 | ✅ | 修复解析 bug 后, OTAR 持续递增 940+ 块无 NACK |
-| 屏幕进度显示 | ✅ | 进度条正常更新 |
-| 完整文件传输 | ❌ | 主控在转发 ~940/3316 块时重启, 根因待定位 |
+| OTA 协议接收 | ✅ | 修复解析 bug 后, OTAR 持续递增无 NACK |
+| 屏幕进度显示 | ✅ | 进度条正常更新 + 固件版本号显示 |
+| 完整文件传输 | ✅ | 424KB / 3316 块, 零 NACK, Update.end 校验通过, 重启切新槽 |
+| OTA 中断超时保护 | ✅ | 主控崩溃后 C3 15s 自动退出升级模式, 恢复通信 |
 
 ## 八、实车测试中发现并修复的真实问题
+
+> 实车测试总共发现 8 个问题, 全部修复. 按发现顺序记录, 每条都有现象/根因/修复.
 
 ### 问题 1: Arduino-ESP32 core 自动确认新 OTA 固件 (主控)
 
@@ -172,24 +177,73 @@ Action 会:
 
 **修复** (`.github/workflows/build-release.yml`): 加 `permissions: contents: write`.
 
-## 九、已知问题 (待解决)
+### 问题 4: OTA 中断后 C3 永久卡死在升级界面
 
-### C3 OTA 完整传输时主控重启
+**现象**: 主控转发期间崩溃, C3 的 `c3OtaProgress.active` 永远为 true, loop 跳过
+`netLink.update()` → 不再处理 `$S` 帧 → C3 永远显示"主控离线", 无法自愈.
 
-**现象**: 主控转发 C3 固件到约 940/3316 块(~175 秒)时主控重启, C3 没收到完整 `$OTAE`,
-OTA 无法完成. 主控空闲时稳定(30 秒监测 0 次重启).
+**根因**: OTA 进行时 loop 直接 `return`, 没有超时退出机制.
 
-**已排除的原因**:
-- ❌ WiFi 30s 自动关 (转发期间 `sta=1` 有设备连接, 不会关)
-- ❌ 单次 loop 超时 WDT (每块 ~186ms, 远低于 5s)
+**修复** (`terminal/src/c3_terminal.ino` + `uart_link.h`):
+- `C3OtaProgress` 加 `lastChunkMs` 记录最后收块时间
+- loop 加 15 秒超时: 超时则自动退出 OTA 模式, 恢复正常通信
 
-**可能原因** (未验证):
-- 长时间转发导致堆碎片/内存累积
-- SPIFFS File 长期打开
-- WiFi 协议栈事件未及时处理
+### 问题 5: c3_staged_version 从未赋值 (代码审查)
 
-**下一步排查方向**:
-- 加周期诊断日志(进度 + `ESP.getFreeHeap()`)抓崩溃前最后状态
-- 提高波特率 115200→460800 缩短传输时间(3316 块从 ~10 分钟降到 ~2.5 分钟)
-- 用手机上传(稳定 WiFi) + 串口监控, 排除测试环境网络抖动干扰
+**现象**: `$OTAB` 帧的 version 字段永远为空, C3 屏幕显示"目标:"空白.
+
+**根因**: `otaStatus.c3_staged_version` 声明了但无任何赋值点.
+
+**修复** (`firmware/src/ota_manager.h`): C3 上传完成时设默认值 `size:<字节数>`.
+
+### 问题 6: JSON 错误字符串未转义 (代码审查)
+
+**现象**: error 字符串含 `"` 或 `\` 时破坏 JSON 结构, 前端 `JSON.parse` 失败.
+
+**根因**: 4 处 JSON 输出直接拼接动态字符串, 无转义.
+
+**修复**: 新增可复用 `otaJsonEscape()` 函数, 统一转义 4 处 (otaMainUploadDone /
+otaC3UploadDone / otaStatusHandler 主控+C3).
+
+### 问题 7: WiFi 30s 自动关与 OTA 转发冲突
+
+**现象**: 恢复 WiFi 自动关后, C3 转发 (10 分钟) 期间若手机断开, 30s 后 WiFi 被关.
+
+**根因**: 自动关逻辑只看 `sta_num`, 不知道 OTA 在进行中.
+
+**修复** (长期可维护性重构):
+- `otaIsBusy()` 用**黑名单** (只排除终态 IDLE/FAILED/SUCCESS, 其余自动算忙),
+  新增 OTA 状态无需改本函数
+- WiFi 自动关封装成独立函数 `wifiAutoOffTick()`, 从 loop 移出 ~25 行
+- OTA 忙时直接 `return` 跳过自动关, 不再重载 `g_wifi_idle_since` 语义
+
+### 问题 8: SPIFFS 频繁 open/close + hex/size 校验缺失 (代码审查)
+
+**修复**:
+- M1: C3 固件上传改用持久 `static File` 跨回调复用, 避免每 chunk open/close
+- M2: C3 `handleOtaChunk` 加 `hexLen < 2` 拒绝, 防 `Update.write(_,0)`
+- M3: GitHub Action 构建前校验 `FW_VERSION` 与 tag 一致, 防发错版本
+- M4: C3 `handleOtaBegin` 用 `esp_ota_get_next_update_partition` 动态获取槽大小校验
+
+## 九、C3 OTA 完整传输 (已解决)
+
+C3 OTA 完整传输在第二轮实车测试中**成功**:
+- 主控转发 424KB / 3316 块, **零 NACK**, 全部 ACK
+- C3 收到 `$OTAE` 后 `Update.end(true)` 校验通过 → 重启切到新槽
+- 屏幕进度条正常更新, 升级后恢复正常显示
+
+**关键**: 完整传输需要稳定的供电环境. 首轮测试中主控在转发中途因 USB 供电不足
+触发 BROWNOUT 重启 (诊断: `[RST] 上次重启原因: 上电复位`). 换稳定供电后成功.
+
+## 十、设计要点 (长期可维护性)
+
+OTA 功能在代码审查后做了重构, 遵循三个原则:
+
+1. **开闭原则**: `otaIsBusy()` 用黑名单, 新增 OTA 中间状态自动算忙, 无需改既有代码
+2. **模块解耦**: WiFi 逻辑只调用 `otaIsBusy()` 布尔接口, 不了解 OTA 内部状态枚举;
+   OTA 模块不关心 WiFi 如何实现保活
+3. **防呆校验**: GitHub Action 构建前校验版本一致性, 忘了同步源码版本号会 fail;
+   C3 端动态获取分区大小校验, 分区表变了自适应
+
+
 
