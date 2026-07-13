@@ -168,14 +168,26 @@ python -m esptool --port COM3 --chip esp32c3 --baud 460800 \
 
 ### 日常更新固件（只换 app）
 
+> V2.8 起 app 偏移从 `0x10000` 改为 `0x20000` (OTA 分区表让出 otadata 空间).
+
 ```bash
 python -m esptool --port COM3 --chip esp32c3 --baud 460800 \
   --after no_reset write_flash \
-  0x10000 .pio/build/esp32-c3-devkitm-1/firmware.bin
+  0x20000 .pio/build/esp32-c3-devkitm-1/firmware.bin
 ```
 
 > `--after no_reset` 让 C3 烧完后**停留在下载模式**，下次可直连。
 > 若 C3 已启动运行，需按 **BOOT + RESET** 手动进下载模式（Windows CH343 自动复位不可靠）。
+
+### OTA 无线升级 (V2.8+)
+
+C3 支持经主控 UART 代理转发 OTA 升级, 无需接线:
+
+1. 手机连 eBike-BSD 热点 → 192.168.4.1 → "固件升级"卡片
+2. 上传 c3.bin → 主控暂存 SPIFFS → UART1 转发给 C3 (~2 分钟)
+3. C3 屏幕显示进度条 → 完成后自动重启
+
+详见仓库根目录 [OTA.md](../OTA.md).
 
 ## 文件结构
 
