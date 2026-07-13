@@ -13,6 +13,7 @@
 #include <Wire.h>
 #include "lgfx_config.hpp"
 #include "uart_link.h"
+#include "ota_guard.h"     // 回滚保护 (c3OtaBootGuardBegin/c3OtaMarkValid)
 
 // ============ 固件版本 (单一真源) ============
 // platformio.ini -D APP_VERSION 同步写入 esp_app_desc_t, 供 OTA 比对.
@@ -23,7 +24,6 @@
 // 全局对象 (uart_link.h 里只 extern 声明, 实际定义在此)
 LGFX lcd;
 UartLink netLink;
-C3OtaProgress c3OtaProgress;
 
 // ============ FT6336 触摸裸 I2C 读取 ============
 // 不用 LovyanGFX 内置驱动 (横屏旋转坐标有偏移), 直接读 FT6336 寄存器 + 手动变换
@@ -124,18 +124,14 @@ void setup() {
 // #define TOUCH_DEBUG
 
 void loop() {
-    // 1. 读 UART, 更新 netLink.state (含 OTA 帧接收)
+    // 1. 读 UART, 更新 netLink.state (含 OTA 帧接收, OTA 帧转发到 otaReceiver)
     netLink.update();
 
     // OTA 升级进行中: 全屏显示进度, 跳过正常视图 + 报警音 (避免升级期间 SPI 总线竞争)
-    if (c3OtaProgress.active) {
-        // ⚠ 超时保护: 15 秒没收到分块 → 判定中断 → 自动退出 OTA 模式, 恢复正常接收
-        // (主控崩溃/UART 断线等场景, 防止卡死在升级界面永远无法恢复)
-        if (c3OtaProgress.lastChunkMs > 0 && millis() - c3OtaProgress.lastChunkMs > 15000) {
-            Serial.println(F("[OTA] 超时 (15s 无数据), 自动退出升级模式"));
-            c3OtaProgress.active = false;
-            // 继续执行下面的正常视图处理
-        } else {
+    if (netLink.otaReceiver.isActive()) {
+        // 超时保护: 15 秒没收到分块 → 自动退出 OTA 模式 (封装在 OtaReceiver 内)
+        netLink.otaReceiver.timeoutCheck();
+        if (netLink.otaReceiver.isActive()) {   // timeoutCheck 可能退出 OTA
 #ifdef ENABLE_DISPLAY
             drawOtaOverlay();
 #endif
@@ -165,7 +161,8 @@ inline uint16_t lgxcolor888_mute() { return lgfx::color888(139, 148, 158); }
 
 void drawOtaOverlay() {
     static int lastPct = -1;
-    int pct = c3OtaProgress.percent;
+    const C3OtaProgress &p = netLink.otaReceiver.getProgress();
+    int pct = p.percent;
     // 仅在百分比变化时重绘 (减少 SPI 刷新, 节省带宽 + 防撕裂)
     if (pct == lastPct) return;
     lastPct = pct;
@@ -179,8 +176,8 @@ void drawOtaOverlay() {
 
     lcd.setTextColor(lgfx::color888(201, 209, 217));
     lcd.setTextSize(1);
-    lcd.drawString(String("目标: ") + c3OtaProgress.version, lcd.width() / 2, 90);
-    lcd.drawString(String(c3OtaProgress.curSeq) + " / " + c3OtaProgress.totalSeq + " 块",
+    lcd.drawString(String("目标: ") + p.version, lcd.width() / 2, 90);
+    lcd.drawString(String(p.curSeq) + " / " + p.totalSeq + " 块",
                    lcd.width() / 2, 110);
 
     // 进度条
