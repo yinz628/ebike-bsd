@@ -308,8 +308,12 @@ async function wifiOff(){
 // ============ OTA 升级 ============
 // jsDelivr CDN 拉取云端 manifest (走手机蜂窝/WiFi, 不经 ESP32).
 // 仓库: github.com/yinz628/ebike-bsd; manifest.json 由 GitHub Action 推到 gh-pages 分支.
-var OTA_MANIFEST_URL='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@gh-pages/manifest.json';
-var OTA_FW_BASE='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@gh-pages/';
+// ⚠ jsDelivr 的 @gh-pages 分支别名缓存最长 12 小时, 发新版后可能延迟.
+// 用 gh-pages 的 commit hash 锁定版本, 绕过分支别名缓存.
+// 发新版后: 改此处 hash (从 GitHub gh-pages 分支复制) + 重新 OTA 推送固件.
+var OTA_GH_PAGES='08bc9ee1c881';   // gh-pages 分支 commit hash (V3.0)
+var OTA_MANIFEST_URL='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@'+OTA_GH_PAGES+'/manifest.json';
+var OTA_FW_BASE='https://cdn.jsdelivr.net/gh/yinz628/ebike-bsd@'+OTA_GH_PAGES+'/';
 var otaCurVer='?',otaManifest=null;
 
 function otaSetProg(p,msg){var b=q('#ota-prog-bar'),t=q('#ota-prog-txt');q('#ota-prog').style.display='block';b.style.width=Math.round(p)+'%';t.textContent=(msg||'')+Math.round(p)+'%'}
