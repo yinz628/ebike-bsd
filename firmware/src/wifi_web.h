@@ -473,16 +473,22 @@ void initWebServer() {
                 static StaticJsonDocument<4096> doc;
                 doc.clear();
                 DeserializationError err = deserializeJson(doc, body);
+                bool saved = false;
                 if (!err) {
                     Serial.print("[WEB] POST body: "); Serial.println(body);
                     config.fromJson(doc);
-                    bool saved = config.saveToNVS();
-                    if (!saved) Serial.println("[WEB] WARN: saveToNVS returned false!");
+                    saved = config.saveToNVS();
+                    if (!saved) {
+                        Serial.println("[WEB] WARN: saveToNVS returned false!");
+                    }
                     radar.setBSDMode();
                 } else {
                     Serial.print("[WEB] JSON parse err: "); Serial.println(err.c_str());
                 }
-                AsyncWebServerResponse *resp = req->beginResponse(err ? 400 : 200, "text/plain", err ? "invalid JSON" : "OK");
+                // JSON 解析失败 → 400; saveToNVS 失败 → 500 (前端能感知到保存失败)
+                int code = saved ? 200 : (err ? 400 : 500);
+                const char *msg = saved ? "OK" : (err ? "invalid JSON" : "NVS save failed");
+                AsyncWebServerResponse *resp = req->beginResponse(code, "text/plain", msg);
                 resp->addHeader("Access-Control-Allow-Origin", "*");
                 req->send(resp);
             }

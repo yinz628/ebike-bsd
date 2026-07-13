@@ -120,6 +120,8 @@ void setTurnLEDs(bool on, bool left, bool right);
 void updateIndicatorLEDs();   // 集中LED状态机
 void debugOutput();
 void wifiAutoOffTick();       // WiFi 30s 无连接自动关状态机 (封装, 避免散落在 loop)
+void handleSerialCommand();   // 串口命令解析 (BEEP/ALARM/SAVE/RESET/DUMP/LOAD/CMD:)
+void handleRadarReconnect();  // 雷达自动重连 + 主动配置状态机
 
 // ===============================================================
 //  SETUP
@@ -231,90 +233,14 @@ void loop() {
     // 2) 读取雷达数据 (单雷达)
     radar.readFrame();
     radar.checkStale(500);  // 500ms无新帧→清零, 防止旧目标残留
-    
-    // 2.5) 自动检测雷达重连并重新配置
-    static bool radar_configured = false;
-    static unsigned long last_radar_rx = 0;
-    if (radar.getTotalBytes() > 0) last_radar_rx = millis();
-    // 雷达有数据 (>50字节 - 确保boot日志完全输出) 且尚未配置 → 发配置
-    if (!radar_configured && radar.getTotalBytes() > 50) {
-        radar_configured = true;
-        Serial.println("[AUTO-CFG] 雷达启动完成，发送配置...");
-        delay(500);  // 等雷达完全就绪
-        radar.setBSDMode();
-    }
-    // 超时 5 秒无数据 → 重置检测 (雷达可能被热插拔了)
-    if (radar_configured && (millis() - last_radar_rx) > 5000 && radar.getTotalBytes() == 0) {
-        radar_configured = false;
-        Serial.println("[AUTO-CFG] 雷达静默，等待重连...");
-    }
-    // 首次运行 5 秒后仍未检测到 → 主动发送配置
-    static bool proactive_sent = false;
-    if (!radar_configured && !proactive_sent && millis() > 5000) {
-        proactive_sent = true;
-        Serial.println("[AUTO-CFG] 超时主动配置...");
-        delay(100);
-        radar.setBSDMode();
-        radar_configured = true;
-    }
 
-    // 2.6) 串口命令转发 (PC→ESP32→雷达)
-    if (Serial.available()) {
-        String line = Serial.readStringUntil('\n');
-        line.trim();
-        
-        if (line == "BEEP") {
-            digitalWrite(BUZZER_PIN, HIGH); delay(200);
-            digitalWrite(BUZZER_PIN, LOW);
-            Serial.println("[FWD] BEEP test");
-        }
-        else if (line == "ALARM") {
-            // 触发 RCW 蜂鸣 3 秒 (测试主控蜂鸣器 + C3 扬声器同步)
-            alarm_test_until = millis() + 3000;
-            Serial.println("[FWD] ALARM test (RCW 4Hz, 3s)");
-        }
-        else if (line == "SAVE") {
-            config.saveToNVS();
-            Serial.println("[FWD] Config saved to NVS");
-        }
-        else if (line == "RESET") {
-            config.factoryReset();
-            radar.setBSDMode();  // 将出厂配置立即下发给雷达 (灵敏度/距离)
-            Serial.println("[FWD] Factory reset done, NVS cleared, radar reconfigured");
-        }
-        else if (line == "DUMP") {
-            static StaticJsonDocument<4096> dump_doc;
-            dump_doc.clear();
-            config.toJson(dump_doc);
-            serializeJson(dump_doc, Serial);
-            Serial.println();
-        }
-        else if (line == "LOAD") {
-            if (!config.loadFromNVS()) {
-                Serial.println("[CONFIG] NVS 无配置或读取失败, 使用默认值 (不写 NVS)");
-            }
-            config.summary();
-        }
-        else if (line.startsWith("CMD:")) {
-            // 解析hex: CMD:58D102005B00
-            String hex = line.substring(4);
-            uint8_t buf[32]; int len = 0;
-            for (int i = 0; i < (int)hex.length() && len < 32; i += 2) {
-                if (i+1 < (int)hex.length()) {
-                    char c1 = hex[i], c2 = hex[i+1];
-                    if (isxdigit(c1) && isxdigit(c2)) {
-                        buf[len++] = (hexDigit(c1) << 4) | hexDigit(c2);
-                    }
-                }
-            }
-            if (len > 0) {
-                radar.sendCmd(buf, len);  // 通过雷达对象发送 (封装的 UART)
-                Serial.print("[FWD] sent "); Serial.print(len); Serial.println(" bytes");
-            }
-        }
-    }
-    
-    
+    // 2.5) 雷达自动重连 + 主动配置 (提取为独立函数)
+    handleRadarReconnect();
+
+    // 2.6) 串口命令解析 (提取为独立函数)
+    handleSerialCommand();
+
+
     // 3) 后方监测 (BSD+RCW合并): 低速→慢闪, 高速→快闪
     ind_left_mode = IND_MODE_OFF;
     ind_right_mode = IND_MODE_OFF;
@@ -732,6 +658,95 @@ void wifiAutoOffTick() {
         WiFi.enableAP(false);
         WiFi.mode(WIFI_OFF);
         g_wifi_running = false;
+    }
+}
+
+// ===============================================================
+//  串口命令解析 (从 loop 提取, 54 行 → 独立函数)
+//  命令: BEEP / ALARM / SAVE / RESET / DUMP / LOAD / CMD:<hex>
+// ===============================================================
+void handleSerialCommand() {
+    if (!Serial.available()) return;
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+
+    if (line == "BEEP") {
+        digitalWrite(BUZZER_PIN, HIGH); delay(200);
+        digitalWrite(BUZZER_PIN, LOW);
+        Serial.println("[FWD] BEEP test");
+    }
+    else if (line == "ALARM") {
+        alarm_test_until = millis() + 3000;
+        Serial.println("[FWD] ALARM test (RCW 4Hz, 3s)");
+    }
+    else if (line == "SAVE") {
+        config.saveToNVS();
+        Serial.println("[FWD] Config saved to NVS");
+    }
+    else if (line == "RESET") {
+        config.factoryReset();
+        radar.setBSDMode();
+        Serial.println("[FWD] Factory reset done, NVS cleared, radar reconfigured");
+    }
+    else if (line == "DUMP") {
+        static StaticJsonDocument<4096> dump_doc;
+        dump_doc.clear();
+        config.toJson(dump_doc);
+        serializeJson(dump_doc, Serial);
+        Serial.println();
+    }
+    else if (line == "LOAD") {
+        if (!config.loadFromNVS()) {
+            Serial.println("[CONFIG] NVS 无配置或读取失败, 使用默认值 (不写 NVS)");
+        }
+        config.summary();
+    }
+    else if (line.startsWith("CMD:")) {
+        String hex = line.substring(4);
+        uint8_t buf[32]; int len = 0;
+        for (int i = 0; i < (int)hex.length() && len < 32; i += 2) {
+            if (i+1 < (int)hex.length()) {
+                char c1 = hex[i], c2 = hex[i+1];
+                if (isxdigit(c1) && isxdigit(c2)) {
+                    buf[len++] = (hexDigit(c1) << 4) | hexDigit(c2);
+                }
+            }
+        }
+        if (len > 0) {
+            radar.sendCmd(buf, len);
+            Serial.print("[FWD] sent "); Serial.print(len); Serial.println(" bytes");
+        }
+    }
+}
+
+// ===============================================================
+//  雷达自动重连 + 主动配置 (从 loop 提取, 24 行 → 独立函数)
+//  - 有数据且未配置 → 发 BSD 配置
+//  - 5s 静默 → 重置, 等待重连
+//  - 首次 5s 超时 → 主动发配置
+// ===============================================================
+void handleRadarReconnect() {
+    static bool radar_configured = false;
+    static unsigned long last_radar_rx = 0;
+    if (radar.getTotalBytes() > 0) last_radar_rx = millis();
+
+    if (!radar_configured && radar.getTotalBytes() > 50) {
+        radar_configured = true;
+        Serial.println("[AUTO-CFG] 雷达启动完成，发送配置...");
+        delay(500);
+        radar.setBSDMode();
+    }
+    if (radar_configured && (millis() - last_radar_rx) > 5000 && radar.getTotalBytes() == 0) {
+        radar_configured = false;
+        Serial.println("[AUTO-CFG] 雷达静默，等待重连...");
+    }
+    static bool proactive_sent = false;
+    if (!radar_configured && !proactive_sent && millis() > 5000) {
+        proactive_sent = true;
+        Serial.println("[AUTO-CFG] 超时主动配置...");
+        delay(100);
+        radar.setBSDMode();
+        radar_configured = true;
     }
 }
 
