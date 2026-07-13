@@ -8,7 +8,7 @@
 // 所有展示点 (启动横幅/Web/终端) 和 ota_manager.h/wifi_web.h 统一引用此宏.
 // platformio.ini 的 -D APP_VERSION 同步写入 esp_app_desc_t 供 OTA/esptool 读取.
 #ifndef FW_VERSION
-#define FW_VERSION "V2.8"
+#define FW_VERSION "V3.0"
 #endif
 
 #include <Arduino.h>

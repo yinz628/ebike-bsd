@@ -18,7 +18,7 @@
 // ============ 固件版本 (单一真源) ============
 // platformio.ini -D APP_VERSION 同步写入 esp_app_desc_t, 供 OTA 比对.
 #ifndef FW_VERSION
-#define FW_VERSION "V0.2"
+#define FW_VERSION "V1.0"
 #endif
 
 // 全局对象 (uart_link.h 里只 extern 声明, 实际定义在此)
