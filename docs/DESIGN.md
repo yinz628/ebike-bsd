@@ -982,6 +982,55 @@ board_build.partitions = default_ffat.csv
 
 ---
 
+## 8.6 功耗与散热 (2026-07-12 审查)
+
+### 现状
+
+ESP32 主控在 WiFi 开启后发热明显。主要热源 (按贡献排序):
+
+| 热源 | 当前状态 | 说明 |
+|---|---|---|
+| WiFi 射频 | TX 11dBm (~13mW), 30s 无连接自动关 | 最大热源, AP 模式每秒发 10 次 beacon |
+| CPU | **已降频到 160MHz** (原 240MHz) | V2.8 起, setup() 里 setCpuFrequencyMhz(160) |
+| 主循环 delay(50) | 忙等待, CPU 不休眠 | (见下方约束, 不能用 light sleep) |
+| 蓝牙控制器 | ✅ 已 btStop() | 已优化 |
+| Serial 日志 | ~80 处, 生产可关 | ENABLE_DEBUG_LOG 开关已有 |
+
+### 已实施的优化
+
+**降 CPU 频率 240→160MHz** (`ebike_bsd.ino` setup):
+```cpp
+setCpuFrequencyMhz(160);
+```
+本项目逻辑 (读雷达/比较角度/驱动 LED/WiFi AP) 无需 240MHz, 160MHz 足够,
+CPU 功耗降约 40%. 雷达 UART2 中断处理 (921600 baud) 不受影响 (ESP32 双核,
+中断处理由 WiFi 核心负责, 不受应用核频率影响).
+
+### 已评估但放弃的方案
+
+**Light Sleep 替 delay(50)** — ❌ 放弃
+
+原因: **雷达实时读取是本项目核心安全功能**. `esp_light_sleep_start()` 期间
+CPU 停止, UART 驱动不执行 readFrame(), 硬件 FIFO (128B) + 软件缓冲 (256B)
+在 921600 baud 下约 4ms 即满, 50ms sleep 会丢 ~4600 字节数据 → **漏报后方
+碰撞预警** (安全风险, 不可接受).
+
+即使缩短到 20ms 仍会丢 ~1800 字节. WiFi 关闭时虽然用户没在看, 但雷达
+检测→C3 报警→蜂鸣的链路仍需实时运行.
+
+技术约束详查: AP 模式下 `esp_light_sleep_start()` 还会关射频导致客户端断连
+(见 [ESP-IDF Sleep Modes](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/sleep_modes.html)).
+Arduino-ESP32 默认 `CONFIG_PM_ENABLE` 未开启, `esp_pm_configure` 也不可用.
+
+### 后续可探索 (不影响雷达实时性)
+
+- WiFi TX 功率 11→8.5dBm (近距离够用, 降 ~6mW)
+- WiFi 默认不开机启动 (最大热源消除, 但需改开机逻辑)
+- 生产环境关闭 Serial 日志 (编译开关 ENABLE_DEBUG_LOG 已有)
+- 主控加散热片 (硬件方案, 不改代码)
+
+---
+
 ## V2.5 升级日志 (2026-07-04)
 
 ### 🐛 修复

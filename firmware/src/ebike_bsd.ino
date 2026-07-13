@@ -139,6 +139,12 @@ void setup() {
     Serial.println("=== e-Bike BSD Turn Signal System (" FW_VERSION ") ===");
     Serial.println("Hardware: ESP32 + MS60-3015 x1 (居中安装)");
 
+    // 降 CPU 频率 240→160MHz (降功耗, 减少发热).
+    // 本项目逻辑 (读雷达/比较角度/驱动LED/WiFi AP) 无需 240MHz, 160MHz 足够.
+    // 必须在 WiFi 初始化之前调用.
+    setCpuFrequencyMhz(160);
+    Serial.printf("[CPU] 频率降至 %d MHz (省电)\n", getCpuFrequencyMhz());
+
     // 诊断: 打印上次重启原因 (帮助我们区分 panic / WDT / 掉电 / 手动复位)
     {
         esp_reset_reason_t reason = esp_reset_reason();
