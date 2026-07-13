@@ -49,6 +49,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
+      - name: Build main controller firmware
+        working-directory: firmware
+        run: pio run
+
+      - name: Build C3 terminal firmware
+        id: build_c3
+        working-directory: terminal
+        continue-on-error: true   # C3 构建失败不阻断主控发布 (CI 首次跑有不确定性)
+        run: pio run
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # tag 触发: v3.0 → V3.0
+            TAG="${GITHUB_REF##*/}"
+            VER="${TAG#v}"
+            echo "version=V${VER}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Verify firmware version matches tag (防发错版本)
         env:
           EXPECTED: ${{ steps.ver.outputs.version }}
@@ -66,28 +88,6 @@ jobs:
             exit 1
           fi
           echo "✓ 版本一致性校验通过"
-
-      - name: Build main controller firmware
-        working-directory: firmware
-        run: pio run
-
-      - name: Build C3 terminal firmware
-        id: build_c3
-        working-directory: terminal
-        continue-on-error: true   # C3 构建失败不阻断主控发布 (CI 首次跑有不确定性)
-        run: pio run
-
-      - name: Determine version
-        id: ver
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            # tag 触发: v2.8 → V2.8
-            TAG="${GITHUB_REF##*/}"
-            VER="${TAG#v}"
-            echo "version=V${VER}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          fi
 
       - name: Stage artifacts + compute sha256
         run: |
