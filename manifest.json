@@ -1,0 +1,11 @@
+{
+  "version": "V3.0",
+  "date": "2026-07-13",
+  "main_fw": "firmware.bin",
+  "main_sha256": "4a077b8212a41218b14404b5575f83a543b5461f05809ca857a99490192a1360",
+  "main_size": 1022912,
+  "notes": "固件升级",
+  "c3_fw": "c3.bin",
+  "c3_sha256": "ef0fb26a3d18bade24bc96079befb8d8414ddcebd770a21919490fff99c1043a",
+  "c3_size": 425584
+}
